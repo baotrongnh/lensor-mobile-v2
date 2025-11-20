@@ -1,33 +1,78 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import { MessageCircle, ShoppingBag, Mail, Bell, User } from 'lucide-react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const { colors } = useTheme();
+  const { t } = useTranslation();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.mutedForeground,
+        tabBarStyle: {
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+          borderTopWidth: 0.5,
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 8,
+        },
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginBottom: 2,
+        },
+        tabBarIconStyle: {
+          marginBottom: 0,
+        },
+        href: null, // Hide all routes by default
       }}>
       <Tabs.Screen
-        name="index"
+        name="forum"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: t('Tabs.forum'),
+          tabBarIcon: ({ color }) => <MessageCircle size={23} color={color} strokeWidth={2} />,
+          href: '/(tabs)/forum',
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="marketplace"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: t('Tabs.marketplace'),
+          tabBarIcon: ({ color }) => <ShoppingBag size={23} color={color} strokeWidth={2} />,
+          href: '/(tabs)/marketplace',
+        }}
+      />
+      <Tabs.Screen
+        name="message"
+        options={{
+          title: 'Messages',
+          tabBarIcon: ({ color }) => <Mail size={23} color={color} strokeWidth={2} />,
+          href: '/(tabs)/message',
+        }}
+      />
+      <Tabs.Screen
+        name="notification"
+        options={{
+          title: 'Notifications',
+          tabBarIcon: ({ color }) => <Bell size={23} color={color} strokeWidth={2} />,
+          href: '/(tabs)/notification',
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: t('Tabs.profile'),
+          tabBarIcon: ({ color }) => <User size={23} color={color} strokeWidth={2} />,
+          href: '/(tabs)/profile',
         }}
       />
     </Tabs>

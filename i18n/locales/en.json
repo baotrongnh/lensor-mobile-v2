@@ -1,0 +1,43 @@
+{
+  "HomePage": {
+    "title": "Hello world!"
+  },
+  "Button": {
+    "login": "Login",
+    "register": "Register",
+    "logout": "Logout",
+    "myAccount": "My Account",
+    "profile": "Profile",
+    "darkMode": "Dark Mode",
+    "languages": "Languages",
+    "createPost": "Create Post",
+    "following": "Following",
+    "follow": "Follow",
+    "viewDetail": "View detail",
+    "report": "Report",
+    "savePost": "Save post",
+    "deletePost": "Delete post",
+    "cancel": "Cancel",
+    "post": "Post",
+    "share": "Share",
+    "retry": "Retry"
+  },
+  "Forum": {
+    "placeholderInputCreatePost": "Let's share what going on your mind....",
+    "imageErrorText": "Image not available",
+    "comment": "Comment",
+    "shareYourComment": "Share your comment",
+    "search": "Search",
+    "titleInputPlaceholder": "Title",
+    "dialogCreateTitle": "Create your new post",
+    "dialogCreateDescription": "Share your moments with the community",
+    "descriptionInputPlaceholder": "Your post description"
+  },
+  "Tabs": {
+    "forum": "Forum",
+    "marketplace": "Marketplace",
+    "wallet": "Wallet",
+    "notifications": "Notifications",
+    "profile": "Profile"
+  }
+}

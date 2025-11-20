@@ -1,0 +1,43 @@
+{
+  "HomePage": {
+    "title": "Xin chào!"
+  },
+  "Button": {
+    "login": "Đăng nhập",
+    "register": "Đăng ký",
+    "logout": "Đăng xuất",
+    "myAccount": "Tài khoản của tôi",
+    "profile": "Hồ sơ",
+    "darkMode": "Chế độ tối",
+    "languages": "Ngôn ngữ",
+    "createPost": "Tạo bài viết",
+    "following": "Đang theo dõi",
+    "follow": "Theo dõi",
+    "viewDetail": "Xem chi tiết",
+    "report": "Báo cáo",
+    "savePost": "Lưu bài viết",
+    "deletePost": "Xóa bài viết",
+    "cancel": "Hủy",
+    "post": "Đăng",
+    "share": "Chia sẻ",
+    "retry": "Thử lại"
+  },
+  "Forum": {
+    "placeholderInputCreatePost": "Hãy chia sẻ suy nghĩ của bạn....",
+    "imageErrorText": "Hình ảnh không khả dụng",
+    "comment": "Bình luận",
+    "shareYourComment": "Chia sẻ bình luận của bạn",
+    "search": "Tìm kiếm",
+    "titleInputPlaceholder": "Tiêu đề",
+    "dialogCreateTitle": "Tạo bài viết mới",
+    "dialogCreateDescription": "Chia sẻ khoảnh khắc của bạn với cộng đồng",
+    "descriptionInputPlaceholder": "Mô tả bài viết của bạn"
+  },
+  "Tabs": {
+    "forum": "Diễn đàn",
+    "marketplace": "Chợ",
+    "wallet": "Ví",
+    "notifications": "Thông báo",
+    "profile": "Hồ sơ"
+  }
+}

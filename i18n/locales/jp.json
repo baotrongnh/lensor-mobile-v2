@@ -1,0 +1,43 @@
+{
+  "HomePage": {
+    "title": "こんにちは!"
+  },
+  "Button": {
+    "login": "ログイン",
+    "register": "登録",
+    "logout": "ログアウト",
+    "myAccount": "マイアカウント",
+    "profile": "プロフィール",
+    "darkMode": "ダークモード",
+    "languages": "言語",
+    "createPost": "投稿を作成",
+    "following": "フォロー中",
+    "follow": "フォロー",
+    "viewDetail": "詳細を見る",
+    "report": "報告",
+    "savePost": "投稿を保存",
+    "deletePost": "投稿を削除",
+    "cancel": "キャンセル",
+    "post": "投稿",
+    "share": "共有",
+    "retry": "再試行"
+  },
+  "Forum": {
+    "placeholderInputCreatePost": "あなたの考えを共有しましょう....",
+    "imageErrorText": "画像が利用できません",
+    "comment": "コメント",
+    "shareYourComment": "コメントを共有",
+    "search": "検索",
+    "titleInputPlaceholder": "タイトル",
+    "dialogCreateTitle": "新しい投稿を作成",
+    "dialogCreateDescription": "コミュニティとあなたの瞬間を共有",
+    "descriptionInputPlaceholder": "投稿の説明"
+  },
+  "Tabs": {
+    "forum": "フォーラム",
+    "marketplace": "マーケット",
+    "create": "作成",
+    "notifications": "通知",
+    "profile": "プロフィール"
+  }
+}
