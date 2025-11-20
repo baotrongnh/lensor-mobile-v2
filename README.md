@@ -136,3 +136,4 @@ t("Tabs.forum"); // Localized text
 ## 🎉 Credits
 
 Built with ❤️ for Lensor platform
+"# lensor-mobile-v2" 
