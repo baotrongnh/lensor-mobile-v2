@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useTheme } from '@/contexts/ThemeContext';
-import { X, CreditCard, Wallet, ArrowLeft } from 'lucide-react-native';
+import { X, Wallet, ArrowLeft } from 'lucide-react-native';
 import { Spacing } from '@/constants/Colors';
 import { paymentApi } from '@/lib/api/paymentApi';
 import { useWalletStore } from '@/stores/walletStore';
@@ -33,12 +33,10 @@ export default function DepositModal({ visible, onClose, onSuccess }: DepositMod
      const [amount, setAmount] = useState('');
      const [displayAmount, setDisplayAmount] = useState('');
      const [isLoading, setIsLoading] = useState(false);
-     const [selectedMethod, setSelectedMethod] = useState<'paypal' | 'vnpay' | null>(null);
 
      // Payment WebView state
      const [showWebView, setShowWebView] = useState(false);
      const [paymentUrl, setPaymentUrl] = useState('');
-     const [paymentMethod, setPaymentMethod] = useState<'paypal' | 'vnpay'>('vnpay');
      const [webViewLoading, setWebViewLoading] = useState(true);
      const [verifying, setVerifying] = useState(false);
 
@@ -54,7 +52,7 @@ export default function DepositModal({ visible, onClose, onSuccess }: DepositMod
           setDisplayAmount(formatCurrency(rawValue));
      };
 
-     const handleDeposit = async (method: 'paypal' | 'vnpay') => {
+     const handleDeposit = async () => {
           if (!amount || Number(amount) <= 0) {
                Alert.alert('Invalid Amount', 'Please enter a valid amount');
                return;
@@ -68,39 +66,24 @@ export default function DepositModal({ visible, onClose, onSuccess }: DepositMod
           setIsLoading(true);
           try {
                const amountNumber = Number(amount);
-               const orderInfo = `Deposit_${amountNumber.toLocaleString('vi-VN')}_VND_to_Lensor_wallet`;
-               let result;
 
                logger.log('═══════════════════════════════════════════════════');
                logger.log('💰 DEPOSIT REQUEST');
                logger.log('═══════════════════════════════════════════════════');
                logger.log('💵 Amount:', amountNumber, 'VNĐ');
-               logger.log('🏦 Method:', method.toUpperCase());
-               logger.log('📝 Order Info:', orderInfo);
+               logger.log('🏦 Method: PayOS');
                logger.log('═══════════════════════════════════════════════════');
 
-               if (method === 'paypal') {
-                    logger.log('📤 Calling PayPal API...');
-                    result = await paymentApi.createPaypal(amountNumber, orderInfo, false);
-                    logger.log('📥 PayPal Response:', JSON.stringify(result, null, 2));
+               logger.log('📤 Calling PayOS API...');
+               const result = await paymentApi.createPayos(amountNumber);
+               logger.log('📥 PayOS Response:', JSON.stringify(result, null, 2));
 
-                    if (result?.data?.url) {
-                         logger.log('🌐 Opening PayPal in WebView');
-                         setPaymentUrl(result.data.url);
-                         setPaymentMethod('paypal');
-                         setShowWebView(true);
-                    }
+               if (result?.data?.paymentUrl) {
+                    logger.log('🌐 Opening PayOS in WebView');
+                    setPaymentUrl(result.data.paymentUrl);
+                    setShowWebView(true);
                } else {
-                    logger.log('📤 Calling VNPay API...');
-                    result = await paymentApi.createVnpay(amountNumber, orderInfo, false);
-                    logger.log('📥 VNPay Response:', JSON.stringify(result, null, 2));
-
-                    if (result?.data?.paymentUrl) {
-                         logger.log('🌐 Opening VNPay in WebView');
-                         setPaymentUrl(result.data.paymentUrl);
-                         setPaymentMethod('vnpay');
-                         setShowWebView(true);
-                    }
+                    Alert.alert('Error', 'Failed to get payment URL');
                }
 
                logger.log('═══════════════════════════════════════════════════');
@@ -120,15 +103,14 @@ export default function DepositModal({ visible, onClose, onSuccess }: DepositMod
           const { url } = navState;
           logger.log('📍 WebView Navigation:', url);
 
-          // Check if this is a callback URL
+          // Check if this is a PayOS callback URL
           if (
-               url.includes('vnp_ResponseCode') ||
-               url.includes('vnp_TransactionStatus') ||
-               url.includes('paymentId') ||
                url.includes('payment/success') ||
-               url.includes('payment/cancel')
+               url.includes('payment/failed') ||
+               url.includes('status=PAID') ||
+               url.includes('status=CANCELLED')
           ) {
-               logger.log('✅ Detected payment callback URL');
+               logger.log('✅ Detected PayOS callback URL');
                setVerifying(true);
 
                try {
@@ -142,11 +124,11 @@ export default function DepositModal({ visible, onClose, onSuccess }: DepositMod
 
                     logger.log('📋 Callback Params:', JSON.stringify(params, null, 2));
 
-                    // Verify payment with backend
-                    const result = await paymentApi.vnpayCallback(params);
-                    logger.log('📥 Backend Response:', JSON.stringify(result, null, 2));
+                    // Check if payment was successful
+                    const isSuccess = url.includes('payment/success') || params.status === 'PAID';
+                    const isCancelled = url.includes('payment/failed') || params.status === 'CANCELLED';
 
-                    if (result?.data?.success) {
+                    if (isSuccess) {
                          logger.log('✅ Payment successful, refreshing wallet...');
 
                          // Close WebView first
@@ -163,7 +145,6 @@ export default function DepositModal({ visible, onClose, onSuccess }: DepositMod
                                    setPaymentUrl('');
                                    setAmount('');
                                    setDisplayAmount('');
-                                   setSelectedMethod(null);
 
                                    // Show success message
                                    Alert.alert(
@@ -189,22 +170,21 @@ export default function DepositModal({ visible, onClose, onSuccess }: DepositMod
                                    onClose();
                               }
                          }, 300);
-                    } else {
-                         logger.log('❌ Payment failed');
+                    } else if (isCancelled) {
+                         logger.log('❌ Payment cancelled');
                          setShowWebView(false);
                          setVerifying(false);
 
                          setTimeout(() => {
                               Alert.alert(
-                                   'Payment Failed',
-                                   result?.data?.message || 'Payment verification failed. Please try again.',
+                                   'Payment Cancelled',
+                                   params.cancel === 'true' ? 'You cancelled the payment.' : 'Payment was not completed.',
                                    [
                                         {
                                              text: 'Try Again',
                                              onPress: () => {
                                                   // Reset to allow retry
                                                   setPaymentUrl('');
-                                                  setSelectedMethod(null);
                                              }
                                         },
                                         {
@@ -224,7 +204,7 @@ export default function DepositModal({ visible, onClose, onSuccess }: DepositMod
                     setTimeout(() => {
                          Alert.alert(
                               'Error',
-                              'An error occurred while verifying payment. Please check your wallet or contact support.',
+                              'An error occurred while processing payment. Please check your wallet or contact support.',
                               [
                                    { text: 'OK', onPress: () => onClose() }
                               ]
@@ -250,8 +230,6 @@ export default function DepositModal({ visible, onClose, onSuccess }: DepositMod
                               onPress: () => {
                                    setShowWebView(false);
                                    setPaymentUrl('');
-                                   setPaymentMethod('vnpay');
-                                   setSelectedMethod(null);
                               }
                          }
                     ]
@@ -263,7 +241,6 @@ export default function DepositModal({ visible, onClose, onSuccess }: DepositMod
           if (!isLoading && !showWebView) {
                setAmount('');
                setDisplayAmount('');
-               setSelectedMethod(null);
                onClose();
           }
      };
@@ -327,77 +304,21 @@ export default function DepositModal({ visible, onClose, onSuccess }: DepositMod
                                         </Text>
                                    </View>
 
-                                   {/* Payment Methods */}
+                                   {/* Payment Method */}
                                    <View style={styles.section}>
                                         <Text style={[styles.label, { color: colors.foreground }]}>Payment Method</Text>
-                                        <View style={styles.methodsContainer}>
-                                             <TouchableOpacity
-                                                  style={[
-                                                       styles.methodBtn,
-                                                       {
-                                                            backgroundColor:
-                                                                 selectedMethod === 'paypal'
-                                                                      ? colors.primary + '20'
-                                                                      : colors.background,
-                                                            borderColor:
-                                                                 selectedMethod === 'paypal' ? colors.primary : colors.border,
-                                                       },
-                                                  ]}
-                                                  onPress={() => setSelectedMethod('paypal')}
-                                                  disabled={isLoading}
-                                             >
-                                                  <CreditCard
-                                                       size={32}
-                                                       color={selectedMethod === 'paypal' ? colors.primary : colors.foreground}
-                                                  />
-                                                  <Text
-                                                       style={[
-                                                            styles.methodText,
-                                                            {
-                                                                 color:
-                                                                      selectedMethod === 'paypal'
-                                                                           ? colors.primary
-                                                                           : colors.foreground,
-                                                            },
-                                                       ]}
-                                                  >
-                                                       PayPal
-                                                  </Text>
-                                             </TouchableOpacity>
-
-                                             <TouchableOpacity
-                                                  style={[
-                                                       styles.methodBtn,
-                                                       {
-                                                            backgroundColor:
-                                                                 selectedMethod === 'vnpay'
-                                                                      ? colors.primary + '20'
-                                                                      : colors.background,
-                                                            borderColor:
-                                                                 selectedMethod === 'vnpay' ? colors.primary : colors.border,
-                                                       },
-                                                  ]}
-                                                  onPress={() => setSelectedMethod('vnpay')}
-                                                  disabled={isLoading}
-                                             >
-                                                  <Wallet
-                                                       size={32}
-                                                       color={selectedMethod === 'vnpay' ? colors.primary : colors.foreground}
-                                                  />
-                                                  <Text
-                                                       style={[
-                                                            styles.methodText,
-                                                            {
-                                                                 color:
-                                                                      selectedMethod === 'vnpay'
-                                                                           ? colors.primary
-                                                                           : colors.foreground,
-                                                            },
-                                                       ]}
-                                                  >
-                                                       VNPay
-                                                  </Text>
-                                             </TouchableOpacity>
+                                        <View
+                                             style={[
+                                                  styles.methodBtn,
+                                                  {
+                                                       backgroundColor: colors.primary + '20',
+                                                       borderColor: colors.primary,
+                                                  },
+                                             ]}
+                                        >
+                                             <Wallet size={32} color={colors.primary} />
+                                             <Text style={[styles.methodText, { color: colors.primary }]}>PayOS</Text>
+                                             <Text style={[styles.hint, { color: colors.mutedForeground }]}>Secure payment via PayOS</Text>
                                         </View>
                                    </View>
 
@@ -407,13 +328,13 @@ export default function DepositModal({ visible, onClose, onSuccess }: DepositMod
                                              styles.submitBtn,
                                              {
                                                   backgroundColor:
-                                                       isLoading || !selectedMethod || !amount
+                                                       isLoading || !amount
                                                             ? colors.mutedForeground
                                                             : colors.primary,
                                              },
                                         ]}
-                                        onPress={() => selectedMethod && handleDeposit(selectedMethod)}
-                                        disabled={isLoading || !selectedMethod || !amount}
+                                        onPress={handleDeposit}
+                                        disabled={isLoading || !amount}
                                    >
                                         {isLoading ? (
                                              <ActivityIndicator color="#fff" />
@@ -439,7 +360,7 @@ export default function DepositModal({ visible, onClose, onSuccess }: DepositMod
                                    <ArrowLeft size={24} color={colors.foreground} />
                               </TouchableOpacity>
                               <Text style={[styles.webViewTitle, { color: colors.foreground }]}>
-                                   {paymentMethod === 'vnpay' ? 'VNPay Payment' : 'PayPal Payment'}
+                                   PayOS Payment
                               </Text>
                               <View style={{ width: 40 }} />
                          </View>
@@ -540,7 +461,6 @@ const styles = StyleSheet.create({
           gap: Spacing.md,
      },
      methodBtn: {
-          flex: 1,
           height: 100,
           borderWidth: 2,
           borderRadius: 12,

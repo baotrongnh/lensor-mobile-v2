@@ -16,24 +16,9 @@ import { userApi } from '@/lib/api/userApi';
 export default function ProfileScreen() {
      const { t } = useTranslation();
      const { colors, toggleTheme, theme } = useTheme();
-     const { user, setUser } = useUserStore();
+     const { user } = useUserStore(); // user is now set in _layout.tsx
      const [stats, setStats] = useState({ followers: 0, following: 0, posts: 0 });
      const [loading, setLoading] = useState(false);
-
-     useEffect(() => {
-          const fetchUser = async () => {
-               const { data: { user: supabaseUser } } = await supabase.auth.getUser();
-               if (supabaseUser) {
-                    setUser({
-                         id: supabaseUser.id,
-                         email: supabaseUser.email || '',
-                         name: supabaseUser.user_metadata?.full_name || supabaseUser.user_metadata?.name || 'User',
-                         avatarUrl: supabaseUser.user_metadata?.avatar_url || supabaseUser.user_metadata?.picture || undefined,
-                    });
-               }
-          };
-          fetchUser();
-     }, [setUser]);
 
      useEffect(() => {
           if (user?.id) {
@@ -148,30 +133,30 @@ export default function ProfileScreen() {
                               </Text>
                               {user && (
                                    <View style={styles.statsContainer}>
-                                        <View style={styles.statItem}>
+                                        <TouchableOpacity style={styles.statItem} onPress={() => router.push('/my-posts')}>
                                              {loading ? (
                                                   <ActivityIndicator size="small" color={colors.primary} />
                                              ) : (
                                                   <Text style={[styles.statValue, { color: colors.foreground }]}>{stats.posts}</Text>
                                              )}
                                              <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Posts</Text>
-                                        </View>
-                                        <View style={styles.statItem}>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity style={styles.statItem} onPress={() => router.push('/followers')}>
                                              {loading ? (
                                                   <ActivityIndicator size="small" color={colors.primary} />
                                              ) : (
                                                   <Text style={[styles.statValue, { color: colors.foreground }]}>{stats.followers}</Text>
                                              )}
                                              <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Followers</Text>
-                                        </View>
-                                        <View style={styles.statItem}>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity style={styles.statItem} onPress={() => router.push('/following')}>
                                              {loading ? (
                                                   <ActivityIndicator size="small" color={colors.primary} />
                                              ) : (
                                                   <Text style={[styles.statValue, { color: colors.foreground }]}>{stats.following}</Text>
                                              )}
                                              <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Following</Text>
-                                        </View>
+                                        </TouchableOpacity>
                                    </View>
                               )}
                          </View>

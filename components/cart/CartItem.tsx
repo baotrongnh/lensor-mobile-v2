@@ -16,15 +16,15 @@ import { router } from 'expo-router';
 
 interface CartItemProps {
      item: CartItemData;
-     isSelected: boolean;
-     onSelect: (itemId: string, selected: boolean) => void;
+     isSelected?: boolean;
+     onSelect?: (itemId: string, selected: boolean) => void;
      onRemove: (itemId: string) => void;
      disabled?: boolean;
 }
 
 export function CartItem({
      item,
-     isSelected,
+     isSelected = false,
      onSelect,
      onRemove,
      disabled = false,
@@ -51,6 +51,7 @@ export function CartItem({
      };
 
      const handleCheckboxChange = () => {
+          if (!onSelect) return;
           if (isUnavailable) {
                Alert.alert('Cannot Select', 'Cannot select unavailable product');
                return;
@@ -66,18 +67,20 @@ export function CartItem({
                     isUnavailable && styles.unavailable
                ]}
           >
-               {/* Checkbox */}
-               <TouchableOpacity
-                    style={styles.checkboxContainer}
-                    onPress={handleCheckboxChange}
-                    disabled={isUnavailable}
-               >
-                    {isSelected && !isUnavailable ? (
-                         <CheckSquare size={24} color={colors.primary} />
-                    ) : (
-                         <Square size={24} color={isUnavailable ? colors.muted : colors.foreground} />
-                    )}
-               </TouchableOpacity>
+               {/* Checkbox - Only show if onSelect is provided */}
+               {onSelect && (
+                    <TouchableOpacity
+                         style={styles.checkboxContainer}
+                         onPress={handleCheckboxChange}
+                         disabled={isUnavailable}
+                    >
+                         {isSelected && !isUnavailable ? (
+                              <CheckSquare size={24} color={colors.primary} />
+                         ) : (
+                              <Square size={24} color={isUnavailable ? colors.muted : colors.foreground} />
+                         )}
+                    </TouchableOpacity>
+               )}
 
                {/* Image */}
                <TouchableOpacity onPress={handlePress} style={styles.imageContainer}>

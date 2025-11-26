@@ -44,10 +44,11 @@ export interface OrderResponse {
 
 export const orderApi = {
      /**
-      * Checkout - Create order from cart
+      * Checkout - Create order from selected cart items
+      * @param productIds - Array of product IDs to checkout
       */
-     checkout: async () => {
-          const res = await apiClient.post(endpoints.orders.checkout);
+     checkout: async (productIds: string[]) => {
+          const res = await apiClient.post(endpoints.orders.checkout, { productIds });
           return res.data;
      },
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions, Modal, Pressable, Share, Alert } from 'react-native';
 import { Heart, MessageCircle, Share2, MoreHorizontal, ImageIcon, X, Camera, Eye, BookMarked, Flag, Trash2, AlertTriangle, EyeOff } from 'lucide-react-native';
-// import { useRouter } from 'expo-router'; // TODO: Enable when profile/:id route is ready
+import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { Avatar } from '@/components/ui/Avatar';
@@ -74,9 +74,9 @@ export const PostItem: React.FC<PostItemProps> = ({ post }) => {
      };
 
      const handleNavigateToProfile = () => {
-          // TODO: Navigate to user profile when profile screen is ready
-          console.log('Navigate to profile:', post.user.id);
-          // router.push(`/(tabs)/profile`); // Temporary until profile/:id is implemented
+          if (post.user.id) {
+               router.push(`/user-profile/${post.user.id}`);
+          }
      };
 
      const handleDeletePost = async () => {
@@ -126,8 +126,16 @@ export const PostItem: React.FC<PostItemProps> = ({ post }) => {
           Alert.alert(t('Forum.report'), t('Forum.reportSent'));
      };
 
+     const getImageUrl = (imagePath: string | undefined) => {
+          if (!imagePath) return null;
+          if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+               return imagePath;
+          }
+          return `${BASE_URL}${imagePath}`;
+     };
+
      const imageUrl = post.imageUrl;
-     const fullImageUrl = imageUrl ? `${BASE_URL}${imageUrl}` : null;
+     const fullImageUrl = getImageUrl(imageUrl);
 
      return (
           <>
@@ -331,7 +339,7 @@ export const PostItem: React.FC<PostItemProps> = ({ post }) => {
                          >
                               <X size={30} color="#fff" strokeWidth={2} />
                          </TouchableOpacity>
-                         {fullImageUrl && (
+                         {fullImageUrl && !imageError && (
                               <Image
                                    source={{ uri: fullImageUrl }}
                                    style={styles.fullscreenImage}

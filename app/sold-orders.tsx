@@ -24,10 +24,12 @@ import { formatDate } from '@/lib/utils/dateFormatter';
 import { getStatusColor } from '@/lib/utils/statusColors';
 import { withdrawalApi } from '@/lib/api/withdrawalApi';
 import { WithdrawalStatistics } from '@/types/withdrawal';
+import { useDiscountRate } from '@/lib/hooks/useDiscountRate';
 
 export default function SoldOrdersScreen() {
      const { colors } = useTheme();
      const { data: orders, error, isLoading, mutate, isValidating } = useSoldOrders();
+     const { discountRate, discountRateNum, isLoading: loadingDiscountRate, error: discountRateError } = useDiscountRate();
      const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
      const [activeTab, setActiveTab] = useState<'all' | 'withdrawable' | 'pending'>('all');
      const [statistics, setStatistics] = useState<WithdrawalStatistics | null>(null);
@@ -37,13 +39,42 @@ export default function SoldOrdersScreen() {
           fetchStatistics();
      }, []);
 
+     // Debug statistics state
+     useEffect(() => {
+          console.log('📊 Statistics state:', {
+               loadingStats,
+               hasStatistics: !!statistics,
+               statistics
+          });
+     }, [statistics, loadingStats]);
+
+     // Show warning if discount rate failed to load
+     useEffect(() => {
+          if (discountRateError) {
+               console.warn('⚠️ Failed to load discount rate:', discountRateError);
+          }
+          if (!loadingDiscountRate && discountRateNum === 0) {
+               console.warn('⚠️ Discount rate is 0 or not loaded');
+          }
+     }, [discountRateError, loadingDiscountRate, discountRateNum]);
+
      const fetchStatistics = async () => {
           try {
                setLoadingStats(true);
+               console.log('📊 Fetching withdrawal statistics...');
                const stats = await withdrawalApi.getStatistics();
+               console.log('📊 Statistics received:', JSON.stringify(stats, null, 2));
+               console.log('📊 Type of stats:', typeof stats);
+               console.log('📊 Is object?', stats && typeof stats === 'object');
+               console.log('📊 Keys:', stats ? Object.keys(stats) : 'null');
+               console.log('📊 totalAmount value:', stats?.totalAmount);
+               console.log('📊 totalFee value:', stats?.totalFee);
+               console.log('📊 totalActualAmount value:', stats?.totalActualAmount);
                setStatistics(stats);
           } catch (error: any) {
-               console.error('Failed to fetch statistics:', error);
+               console.error('❌ Failed to fetch statistics:', error);
+               console.error('❌ Error response:', error.response?.data);
+               console.error('❌ Error status:', error.response?.status);
                // Gracefully handle if endpoint doesn't exist yet
                if (error.response?.status !== 404) {
                     Alert.alert('Error', 'Failed to load statistics');
@@ -62,8 +93,22 @@ export default function SoldOrdersScreen() {
 
      const selectedOrders = orders?.filter(order => selectedOrderIds.includes(order.id)) || [];
      const totalSelectedAmount = selectedOrders.reduce((sum, order) => sum + order.sellerEarnings, 0);
-     const fee = totalSelectedAmount * 0.17;
+
+     // Ensure discountRateNum is valid, fallback to 0 if invalid
+     const validDiscountRate = !isNaN(discountRateNum) && discountRateNum > 0 ? discountRateNum : 0;
+     const fee = totalSelectedAmount * (validDiscountRate / 100);
      const netAmount = totalSelectedAmount - fee;
+
+     // Debug log
+     console.log('💰 Withdrawal calculation:', {
+          discountRate,
+          discountRateNum,
+          validDiscountRate,
+          totalSelectedAmount,
+          feeCalculation: `${totalSelectedAmount} * (${validDiscountRate} / 100)`,
+          fee,
+          netAmount
+     });
 
      const totalEarnings = orders?.reduce((sum, order) => sum + order.sellerEarnings, 0) || 0;
      const formatCurrency = (amount: number) => {
@@ -83,6 +128,27 @@ export default function SoldOrdersScreen() {
                Alert.alert('Notice', 'Please select orders to withdraw');
                return;
           }
+
+          // Warn if discount rate is not loaded
+          if (loadingDiscountRate || validDiscountRate === 0) {
+               Alert.alert(
+                    'Warning',
+                    'System fee information is loading or unavailable. The actual fee will be calculated during withdrawal processing.',
+                    [
+                         { text: 'Cancel', style: 'cancel' },
+                         {
+                              text: 'Continue', onPress: () => {
+                                   router.push({
+                                        pathname: '/withdrawal',
+                                        params: { orderIds: selectedOrderIds.join(',') }
+                                   });
+                              }
+                         }
+                    ]
+               );
+               return;
+          }
+
           router.push({
                pathname: '/withdrawal',
                params: { orderIds: selectedOrderIds.join(',') }
@@ -183,57 +249,62 @@ export default function SoldOrdersScreen() {
                </View>
 
                {/* Earnings Summary Card */}
-               {(loadingStats || statistics) && (
-                    <View style={[styles.earningsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                         <View style={styles.earningsHeader}>
-                              <TrendingUp size={20} color={colors.primary} />
-                              <Text style={[styles.earningsTitle, { color: colors.foreground }]}>
-                                   Earnings Summary
+               <View style={[styles.earningsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <View style={styles.earningsHeader}>
+                         <TrendingUp size={20} color={colors.primary} />
+                         <Text style={[styles.earningsTitle, { color: colors.foreground }]}>
+                              Earnings Summary
+                         </Text>
+                    </View>
+                    <View style={styles.earningsContent}>
+                         <View style={styles.earningsRow}>
+                              <Text style={[styles.earningsLabel, { color: colors.mutedForeground }]}>
+                                   Total Earnings:
+                              </Text>
+                              <Text style={[styles.earningsValue, { color: colors.foreground }]}>
+                                   {formatCurrency(totalEarnings)} ₫
                               </Text>
                          </View>
-                         <View style={styles.earningsContent}>
-                              <View style={styles.earningsRow}>
-                                   <Text style={[styles.earningsLabel, { color: colors.mutedForeground }]}>
-                                        Total Earnings:
-                                   </Text>
-                                   <Text style={[styles.earningsValue, { color: colors.foreground }]}>
-                                        {formatCurrency(totalEarnings)} ₫
-                                   </Text>
-                              </View>
-                              {loadingStats ? (
-                                   <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: Spacing.sm }} />
-                              ) : statistics ? (
-                                   <>
-                                        <View style={styles.earningsRow}>
-                                             <Text style={[styles.earningsLabel, { color: colors.mutedForeground }]}>
-                                                  Total Withdrawn:
-                                             </Text>
-                                             <Text style={[styles.earningsValue, { color: colors.foreground }]}>
-                                                  {formatCurrency(statistics.totalAmount)} ₫
-                                             </Text>
-                                        </View>
-                                        <View style={styles.earningsRow}>
-                                             <Text style={[styles.earningsLabel, { color: colors.mutedForeground }]}>
-                                                  Platform Fee (17%):
-                                             </Text>
-                                             <Text style={[styles.earningsValue, { color: '#ef4444' }]}>
-                                                  -{formatCurrency(statistics.totalFee)} ₫
-                                             </Text>
-                                        </View>
-                                        <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                                        <View style={styles.earningsRow}>
-                                             <Text style={[styles.earningsLabelBold, { color: colors.foreground }]}>
-                                                  Total Received:
-                                             </Text>
-                                             <Text style={[styles.earningsValueBold, { color: '#10b981' }]}>
-                                                  {formatCurrency(statistics.totalActualAmount)} ₫
-                                             </Text>
-                                        </View>
-                                   </>
-                              ) : null}
-                         </View>
+
+                         {loadingStats ? (
+                              <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: Spacing.sm }} />
+                         ) : (
+                              <>
+                                   <View style={styles.earningsRow}>
+                                        <Text style={[styles.earningsLabel, { color: colors.mutedForeground }]}>
+                                             Total Withdrawn: {statistics ? '(loaded)' : '(null)'}
+                                        </Text>
+                                        <Text style={[styles.earningsValue, { color: colors.foreground }]}>
+                                             {statistics?.totalAmount !== undefined
+                                                  ? formatCurrency(statistics.totalAmount)
+                                                  : formatCurrency(0)} ₫
+                                        </Text>
+                                   </View>
+                                   <View style={styles.earningsRow}>
+                                        <Text style={[styles.earningsLabel, { color: colors.mutedForeground }]}>
+                                             Platform Fee ({loadingDiscountRate ? '...' : discountRate || '0'}%):
+                                        </Text>
+                                        <Text style={[styles.earningsValue, { color: '#ef4444' }]}>
+                                             -{statistics?.totalFee !== undefined
+                                                  ? formatCurrency(statistics.totalFee)
+                                                  : formatCurrency(0)} ₫
+                                        </Text>
+                                   </View>
+                                   <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                                   <View style={styles.earningsRow}>
+                                        <Text style={[styles.earningsLabelBold, { color: colors.foreground }]}>
+                                             Total Received:
+                                        </Text>
+                                        <Text style={[styles.earningsValueBold, { color: '#10b981' }]}>
+                                             {statistics?.totalActualAmount !== undefined
+                                                  ? formatCurrency(statistics.totalActualAmount)
+                                                  : formatCurrency(0)} ₫
+                                        </Text>
+                                   </View>
+                              </>
+                         )}
                     </View>
-               )}
+               </View>
 
                {/* Tabs */}
                <View style={styles.tabs}>

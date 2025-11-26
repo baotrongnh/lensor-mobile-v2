@@ -12,12 +12,13 @@ import { useUserStore } from '@/stores/userStore';
 export default function MessageScreen() {
      const { t } = useTranslation();
      const { colors } = useTheme();
+     const { user } = useUserStore();
      const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
      const [loading, setLoading] = useState(true);
 
      useEffect(() => {
           fetchChatRooms();
-     }, []);
+     }, [user?.id]);
 
      const fetchChatRooms = async () => {
           try {
@@ -54,10 +55,14 @@ export default function MessageScreen() {
      };
 
      const renderChatItem = ({ item }: { item: ChatRoom }) => {
-          const currentUserId = useUserStore.getState().user?.id;
-          const otherParticipant = item.participants?.find(p => p.id !== currentUserId) || item.participants?.[0];
-          const avatar = otherParticipant?.avatar || 'https://i.pravatar.cc/150?img=1';
-          const name = otherParticipant?.name || item.name || 'Unknown';
+          // Get OTHER participant (not current user)
+          const otherParticipant = item.participants?.find(p => p.id !== user?.id);
+
+          // Fallback to first participant if not found (shouldn't happen)
+          const displayParticipant = otherParticipant || item.participants?.[0];
+
+          const avatar = displayParticipant?.avatar || 'https://i.pravatar.cc/150?img=1';
+          const name = displayParticipant?.name || item.name || 'Unknown User';
           const lastMessage = item.lastMessage?.content || 'No messages yet';
           const time = item.lastMessage?.createdAt ? formatTime(item.lastMessage.createdAt) : '';
 

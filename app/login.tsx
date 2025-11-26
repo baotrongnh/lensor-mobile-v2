@@ -1,6 +1,6 @@
 /**
- * Login Screen - Simple & Clean
- * Hỗ trợ: Email/Password + OAuth (Google, Facebook, GitHub)
+ * Login Screen - Google OAuth Only
+ * Đăng nhập chỉ bằng Google
  */
 
 import React, { useState } from 'react';
@@ -8,13 +8,10 @@ import {
      View,
      Text,
      StyleSheet,
-     TextInput,
      TouchableOpacity,
      ActivityIndicator,
      Alert,
      ScrollView,
-     KeyboardAvoidingView,
-     Platform,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Spacing } from '@/constants/Colors';
@@ -28,98 +25,13 @@ WebBrowser.maybeCompleteAuthSession();
 export default function LoginScreen() {
      const { colors } = useTheme();
      const router = useRouter();
-     const [formType, setFormType] = useState<'login' | 'register'>('login');
      const [loading, setLoading] = useState(false);
-     const [formData, setFormData] = useState({
-          name: '',
-          email: '',
-          password: '',
-          confirmPassword: '',
-     });
-     const [errors, setErrors] = useState({
-          name: '',
-          email: '',
-          password: '',
-          confirmPassword: '',
-     });
 
-     const validateForm = () => {
-          const newErrors = { name: '', email: '', password: '', confirmPassword: '' };
-
-          // Email validation
-          if (!formData.email) {
-               newErrors.email = 'Email is required';
-          } else if (!/^\S+@\S+\.\S+$/.test(formData.email)) {
-               newErrors.email = 'Please enter a valid email';
-          }
-
-          // Password validation
-          if (!formData.password) {
-               newErrors.password = 'Password is required';
-          } else if (formData.password.length < 6) {
-               newErrors.password = 'Password must be at least 6 characters';
-          }
-
-          // Register validations
-          if (formType === 'register') {
-               if (!formData.name.trim()) {
-                    newErrors.name = 'Full name is required';
-               }
-               if (!formData.confirmPassword) {
-                    newErrors.confirmPassword = 'Please confirm password';
-               } else if (formData.password !== formData.confirmPassword) {
-                    newErrors.confirmPassword = 'Passwords do not match';
-               }
-          }
-
-          setErrors(newErrors);
-          return !Object.values(newErrors).some(err => err !== '');
-     };
-
-     const handleSubmit = async () => {
-          if (!validateForm()) return;
-
+     const handleGoogleLogin = async () => {
           setLoading(true);
           try {
-               if (formType === 'login') {
-                    const { data, error } = await authHelpers.signInWithEmail(
-                         formData.email,
-                         formData.password
-                    );
-
-                    if (error) {
-                         Alert.alert('Login Failed', error.message);
-                    } else if (data.user) {
-                         Alert.alert('Success', 'Login successful!');
-                         router.replace('/(tabs)/forum');
-                    }
-               } else {
-                    const { data, error } = await authHelpers.signUpWithEmail(
-                         formData.name,
-                         formData.email.toLowerCase().trim(),
-                         formData.password
-                    );
-
-                    if (error) {
-                         Alert.alert('Registration Failed', error.message);
-                    } else if (data.user) {
-                         Alert.alert('Success', 'Account created! Please check your email to verify.');
-                         setFormType('login');
-                         setFormData({ name: '', email: formData.email, password: '', confirmPassword: '' });
-                    }
-               }
-          } catch {
-               Alert.alert('Error', 'An error occurred. Please try again.');
-          } finally {
-               setLoading(false);
-          }
-     };
-
-     const handleOAuthLogin = async (provider: 'google' | 'facebook' | 'github') => {
-          setLoading(true);
-          try {
-               // Use Supabase OAuth like web version
-               const { data, error, result } = await authHelpers.signInWithOAuth(provider);
+               // Use Supabase OAuth for Google login
+               const { data, error, result } = await authHelpers.signInWithOAuth('google');
 
                if (error) {
                     Alert.alert('Login Failed', error.message);
@@ -172,189 +84,52 @@ export default function LoginScreen() {
      };
 
      return (
-          <KeyboardAvoidingView
-               style={{ flex: 1 }}
-               behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          <ScrollView
+               style={[styles.container, { backgroundColor: colors.background }]}
+               contentContainerStyle={styles.content}
           >
-               <ScrollView
-                    style={[styles.container, { backgroundColor: colors.background }]}
-                    contentContainerStyle={styles.content}
-                    keyboardShouldPersistTaps="handled"
+               {/* Header */}
+               <View style={styles.header}>
+                    <Text style={[styles.title, { color: colors.foreground }]}>
+                         Welcome to Lensor
+                    </Text>
+                    <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+                         Sign in with your Google account to continue
+                    </Text>
+               </View>
+
+               {/* Logo or Icon Area */}
+               <View style={styles.logoContainer}>
+                    <View style={[styles.logoCircle, { backgroundColor: colors.primary + '20' }]}>
+                         <Text style={[styles.logoText, { color: colors.primary }]}>L</Text>
+                    </View>
+               </View>
+
+               {/* Google Sign In Button */}
+               <TouchableOpacity
+                    style={[styles.googleBtn, { backgroundColor: '#FFFFFF', borderColor: colors.border }]}
+                    onPress={handleGoogleLogin}
+                    disabled={loading}
                >
-                    {/* Header */}
-                    <View style={styles.header}>
-                         <Text style={[styles.title, { color: colors.foreground }]}>
-                              {formType === 'login' ? 'Welcome Back' : 'Create Account'}
-                         </Text>
-                    </View>
-
-                    {/* OAuth Buttons */}
-                    <View style={styles.oauthButtons}>
-                         <TouchableOpacity
-                              style={[styles.oauthBtn, { backgroundColor: '#DB4437' }]}
-                              onPress={() => handleOAuthLogin('google')}
-                              disabled={loading}
-                         >
-                              <Text style={styles.oauthIconText}>G</Text>
-                         </TouchableOpacity>
-
-                         <TouchableOpacity
-                              style={[styles.oauthBtn, { backgroundColor: '#1877F2' }]}
-                              onPress={() => handleOAuthLogin('facebook')}
-                              disabled={loading}
-                         >
-                              <Text style={styles.oauthIconText}>f</Text>
-                         </TouchableOpacity>
-
-                         <TouchableOpacity
-                              style={[styles.oauthBtn, { backgroundColor: '#24292e' }]}
-                              onPress={() => handleOAuthLogin('github')}
-                              disabled={loading}
-                         >
-                              <Text style={styles.oauthIconText}>
-                                   <Text style={{ fontFamily: 'monospace' }}>⚙</Text>
-                              </Text>
-                         </TouchableOpacity>
-                    </View>
-
-                    {/* Separator */}
-                    <View style={styles.separator}>
-                         <View style={[styles.separatorLine, { backgroundColor: colors.border }]} />
-                         <Text style={[styles.separatorText, { color: colors.mutedForeground }]}>
-                              OR CONTINUE WITH
-                         </Text>
-                         <View style={[styles.separatorLine, { backgroundColor: colors.border }]} />
-                    </View>
-
-                    {/* Form */}
-                    <View style={styles.form}>
-                         {formType === 'register' && (
-                              <View style={styles.field}>
-                                   <Text style={[styles.label, { color: colors.foreground }]}>Full Name</Text>
-                                   {errors.name ? (
-                                        <Text style={styles.error}>{errors.name}</Text>
-                                   ) : null}
-                                   <TextInput
-                                        style={[
-                                             styles.input,
-                                             { backgroundColor: colors.muted, color: colors.foreground, borderColor: errors.name ? '#ef4444' : colors.border },
-                                        ]}
-                                        placeholder="John Doe"
-                                        placeholderTextColor={colors.mutedForeground}
-                                        value={formData.name}
-                                        onChangeText={(text) => {
-                                             setFormData({ ...formData, name: text });
-                                             setErrors({ ...errors, name: '' });
-                                        }}
-                                        editable={!loading}
-                                   />
+                    {loading ? (
+                         <ActivityIndicator color="#DB4437" />
+                    ) : (
+                         <>
+                              <View style={styles.googleIcon}>
+                                   <Text style={styles.googleIconText}>G</Text>
                               </View>
-                         )}
+                              <Text style={styles.googleBtnText}>Continue with Google</Text>
+                         </>
+                    )}
+               </TouchableOpacity>
 
-                         <View style={styles.field}>
-                              <Text style={[styles.label, { color: colors.foreground }]}>Email</Text>
-                              {errors.email ? (
-                                   <Text style={styles.error}>{errors.email}</Text>
-                              ) : null}
-                              <TextInput
-                                   style={[
-                                        styles.input,
-                                        { backgroundColor: colors.muted, color: colors.foreground, borderColor: errors.email ? '#ef4444' : colors.border },
-                                   ]}
-                                   placeholder="you@example.com"
-                                   placeholderTextColor={colors.mutedForeground}
-                                   value={formData.email}
-                                   onChangeText={(text) => {
-                                        setFormData({ ...formData, email: text });
-                                        setErrors({ ...errors, email: '' });
-                                   }}
-                                   keyboardType="email-address"
-                                   autoCapitalize="none"
-                                   editable={!loading}
-                              />
-                         </View>
-
-                         <View style={styles.field}>
-                              <Text style={[styles.label, { color: colors.foreground }]}>Password</Text>
-                              {errors.password ? (
-                                   <Text style={styles.error}>{errors.password}</Text>
-                              ) : null}
-                              <TextInput
-                                   style={[
-                                        styles.input,
-                                        { backgroundColor: colors.muted, color: colors.foreground, borderColor: errors.password ? '#ef4444' : colors.border },
-                                   ]}
-                                   placeholder="••••••••"
-                                   placeholderTextColor={colors.mutedForeground}
-                                   value={formData.password}
-                                   onChangeText={(text) => {
-                                        setFormData({ ...formData, password: text });
-                                        setErrors({ ...errors, password: '' });
-                                   }}
-                                   secureTextEntry
-                                   editable={!loading}
-                              />
-                         </View>
-
-                         {formType === 'register' && (
-                              <View style={styles.field}>
-                                   <Text style={[styles.label, { color: colors.foreground }]}>Confirm Password</Text>
-                                   {errors.confirmPassword ? (
-                                        <Text style={styles.error}>{errors.confirmPassword}</Text>
-                                   ) : null}
-                                   <TextInput
-                                        style={[
-                                             styles.input,
-                                             { backgroundColor: colors.muted, color: colors.foreground, borderColor: errors.confirmPassword ? '#ef4444' : colors.border },
-                                        ]}
-                                        placeholder="••••••••"
-                                        placeholderTextColor={colors.mutedForeground}
-                                        value={formData.confirmPassword}
-                                        onChangeText={(text) => {
-                                             setFormData({ ...formData, confirmPassword: text });
-                                             setErrors({ ...errors, confirmPassword: '' });
-                                        }}
-                                        secureTextEntry
-                                        editable={!loading}
-                                   />
-                              </View>
-                         )}
-
-                         {/* Submit Button */}
-                         <TouchableOpacity
-                              style={[styles.submitBtn, { backgroundColor: colors.primary }]}
-                              onPress={handleSubmit}
-                              disabled={loading}
-                         >
-                              {loading ? (
-                                   <ActivityIndicator color={colors.primaryForeground} />
-                              ) : (
-                                   <Text style={[styles.submitBtnText, { color: colors.primaryForeground }]}>
-                                        {formType === 'login' ? 'Sign In' : 'Sign Up'}
-                                   </Text>
-                              )}
-                         </TouchableOpacity>
-                    </View>
-
-                    {/* Toggle Form Type */}
-                    <View style={styles.footer}>
-                         <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
-                              {formType === 'login' ? "Don't have an account? " : 'Already have an account? '}
-                         </Text>
-                         <TouchableOpacity
-                              onPress={() => {
-                                   setFormType(formType === 'login' ? 'register' : 'login');
-                                   setErrors({ name: '', email: '', password: '', confirmPassword: '' });
-                              }}
-                              disabled={loading}
-                         >
-                              <Text style={[styles.footerLink, { color: colors.primary }]}>
-                                   {formType === 'login' ? 'Sign Up' : 'Sign In'}
-                              </Text>
-                         </TouchableOpacity>
-                    </View>
-               </ScrollView>
-          </KeyboardAvoidingView>
+               {/* Footer */}
+               <View style={styles.footer}>
+                    <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
+                         By continuing, you agree to our Terms of Service and Privacy Policy
+                    </Text>
+               </View>
+          </ScrollView>
      );
 }
 
@@ -363,89 +138,80 @@ const styles = StyleSheet.create({
           flex: 1,
      },
      content: {
-          padding: Spacing.lg,
-          paddingTop: 60,
+          flex: 1,
+          padding: Spacing.xl,
+          justifyContent: 'center',
      },
      header: {
           alignItems: 'center',
-          marginBottom: Spacing.lg,
+          marginBottom: Spacing.xl * 2,
      },
      title: {
-          fontSize: 28,
+          fontSize: 32,
+          fontWeight: 'bold',
+          marginBottom: Spacing.sm,
+          textAlign: 'center',
+     },
+     subtitle: {
+          fontSize: 16,
+          textAlign: 'center',
+          lineHeight: 22,
+     },
+     logoContainer: {
+          alignItems: 'center',
+          marginBottom: Spacing.xl * 2,
+     },
+     logoCircle: {
+          width: 100,
+          height: 100,
+          borderRadius: 50,
+          alignItems: 'center',
+          justifyContent: 'center',
+     },
+     logoText: {
+          fontSize: 48,
           fontWeight: 'bold',
      },
-     oauthButtons: {
+     googleBtn: {
           flexDirection: 'row',
+          alignItems: 'center',
           justifyContent: 'center',
-          gap: Spacing.sm,
-          marginBottom: Spacing.lg,
-     },
-     oauthBtn: {
-          width: 50,
-          height: 50,
+          padding: Spacing.md,
           borderRadius: 12,
+          borderWidth: 1,
+          gap: Spacing.sm,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          elevation: 3,
+     },
+     googleIcon: {
+          width: 24,
+          height: 24,
+          borderRadius: 4,
+          backgroundColor: '#DB4437',
           alignItems: 'center',
           justifyContent: 'center',
      },
-     oauthIconText: {
+     googleIconText: {
           color: 'white',
-          fontSize: 24,
+          fontSize: 16,
           fontWeight: 'bold',
      },
-     separator: {
-          flexDirection: 'row',
-          alignItems: 'center',
-          marginBottom: Spacing.lg,
-     },
-     separatorLine: {
-          flex: 1,
-          height: 1,
-     },
-     separatorText: {
-          fontSize: 11,
-          marginHorizontal: Spacing.sm,
-     },
-     form: {
-          gap: Spacing.md,
-     },
-     field: {
-          gap: 6,
-     },
-     label: {
-          fontSize: 14,
-          fontWeight: '500',
-     },
-     error: {
-          fontSize: 12,
-          color: '#ef4444',
-     },
-     input: {
-          padding: 12,
-          borderRadius: 8,
-          borderWidth: 1,
-          fontSize: 15,
-     },
-     submitBtn: {
-          padding: 14,
-          borderRadius: 8,
-          alignItems: 'center',
-          marginTop: Spacing.sm,
-     },
-     submitBtnText: {
+     googleBtnText: {
           fontSize: 16,
           fontWeight: '600',
+          color: '#333',
      },
      footer: {
-          flexDirection: 'row',
-          justifyContent: 'center',
+          marginTop: Spacing.xl * 2,
           alignItems: 'center',
-          marginTop: Spacing.lg,
      },
      footerText: {
-          fontSize: 14,
-     },
-     footerLink: {
-          fontSize: 14,
-          fontWeight: '600',
+          fontSize: 12,
+          textAlign: 'center',
+          lineHeight: 18,
+          paddingHorizontal: Spacing.lg,
      },
 });

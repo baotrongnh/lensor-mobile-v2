@@ -41,12 +41,39 @@ export default function WithdrawalScreen() {
      const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
      const [note, setNote] = useState('');
      const [showAddCard, setShowAddCard] = useState(false);
+     const [withdrawalInfo, setWithdrawalInfo] = useState<{
+          totalAmount: number;
+          discountAmount: number;
+          payableAmount: number;
+     } | null>(null);
+     const [loadingWithdrawalInfo, setLoadingWithdrawalInfo] = useState(false);
 
      // Add card form
      const [bankName, setBankName] = useState('');
      const [accountNumber, setAccountNumber] = useState('');
      const [accountHolder, setAccountHolder] = useState('');
      const [showBankPicker, setShowBankPicker] = useState(false);
+
+     // Fetch withdrawal calculation
+     useEffect(() => {
+          const fetchWithdrawalInfo = async () => {
+               if (orderIds.length === 0) return;
+
+               setLoadingWithdrawalInfo(true);
+               try {
+                    const { withdrawalApi } = await import('@/lib/api/withdrawalApi');
+                    const info = await withdrawalApi.checkWithdrawal(orderIds);
+                    setWithdrawalInfo(info);
+               } catch (error) {
+                    console.error('Error fetching withdrawal info:', error);
+                    Alert.alert('Error', 'Failed to fetch withdrawal information');
+               } finally {
+                    setLoadingWithdrawalInfo(false);
+               }
+          };
+
+          fetchWithdrawalInfo();
+     }, [orderIds.join(',')]);
 
      const handleAddCard = async () => {
           if (!bankName || !accountNumber || !accountHolder) {
@@ -491,5 +518,42 @@ const styles = StyleSheet.create({
      withdrawBtnText: {
           fontSize: 16,
           fontWeight: 'bold',
+     },
+     infoCard: {
+          padding: Spacing.md,
+          borderRadius: 12,
+          borderWidth: 1,
+          marginBottom: Spacing.lg,
+     },
+     infoTitle: {
+          fontSize: 16,
+          fontWeight: '600',
+          marginBottom: Spacing.md,
+     },
+     infoRow: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: Spacing.sm,
+     },
+     infoLabel: {
+          fontSize: 14,
+     },
+     infoValue: {
+          fontSize: 14,
+          fontWeight: '500',
+     },
+     infoAmount: {
+          fontSize: 18,
+          fontWeight: 'bold',
+     },
+     infoDivider: {
+          borderTopWidth: 1,
+          paddingTop: Spacing.sm,
+          marginTop: Spacing.sm,
+     },
+     infoText: {
+          fontSize: 14,
+          marginLeft: Spacing.sm,
      },
 });

@@ -8,7 +8,7 @@ import {
      ActivityIndicator,
      Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Spacing } from '@/constants/Colors';
 import { useCartStore } from '@/stores/cartStore';
@@ -19,15 +19,28 @@ import { CartItem } from '@/components/cart/CartItem';
 export default function CheckoutScreen() {
      const { colors } = useTheme();
      const router = useRouter();
+     const params = useLocalSearchParams();
      const [processing, setProcessing] = React.useState(false);
 
      const { items, fetchCart, updateQuantity, removeItem } = useCartStore();
      const { balance, fetchBalance } = useWalletStore();
 
+     // Get selected item IDs from params
+     const selectedItemIds = React.useMemo(() => {
+          const selectedParam = params.selectedItems as string;
+          return selectedParam ? selectedParam.split(',') : [];
+     }, [params.selectedItems]);
+
+     // Filter items based on selection from cart
+     const selectedItems = React.useMemo(
+          () => items.filter(item => selectedItemIds.includes(item.id)),
+          [items, selectedItemIds]
+     );
+
      // Only show active products in checkout
      const activeItems = React.useMemo(
-          () => items.filter(item => item.product?.status === 'active'),
-          [items]
+          () => selectedItems.filter(item => item.product?.status === 'active'),
+          [selectedItems]
      );
 
      // Calculate total for active items only
@@ -43,6 +56,23 @@ export default function CheckoutScreen() {
           fetchBalance();
      }, [fetchCart, fetchBalance]);
 
+     // Debug logs
+     React.useEffect(() => {
+          console.log('🔍 Checkout Debug:', {
+               paramsReceived: params.selectedItems,
+               totalItemsInCart: items.length,
+               selectedItemIds: selectedItemIds.length,
+               selectedItems: selectedItems.length,
+               activeItems: activeItems.length,
+               activeItemsData: activeItems.map(item => ({
+                    cartItemId: item.id,
+                    productId: item.product?.id,
+                    title: item.product?.title,
+                    status: item.product?.status
+               }))
+          });
+     }, [params.selectedItems, items, selectedItemIds, selectedItems, activeItems]);
+
      const handleCheckout = async () => {
           if (activeItems.length === 0) {
                Alert.alert('Empty Cart', 'No active products in your cart');
@@ -54,11 +84,13 @@ export default function CheckoutScreen() {
                return;
           }
 
-          const totalVND = Math.round(activeTotal * 25000); // Convert to VND (example rate)
+          console.log('💰 Wallet Balance:', balance);
+          console.log('💸 Total to Pay:', activeTotal);
+          console.log('📦 Items to checkout:', activeItems.length);
 
           Alert.alert(
                'Confirm Purchase',
-               `Pay ${totalVND.toLocaleString('vi-VN')} ₫ with Wallet?`,
+               `Pay ${activeTotal.toLocaleString('vi-VN')} ₫ with Wallet?`,
                [
                     { text: 'Cancel', style: 'cancel' },
                     {
@@ -66,8 +98,32 @@ export default function CheckoutScreen() {
                          onPress: async () => {
                               setProcessing(true);
                               try {
-                                   // Checkout with wallet
-                                   await orderApi.checkout();
+                                   // Get product IDs from selected items
+                                   const productIds = activeItems
+                                        .map(item => item.product?.id)
+                                        .filter((id): id is string => id !== undefined);
+
+                                   // Validation
+                                   if (productIds.length === 0) {
+                                        throw new Error('No valid product IDs found in cart items');
+                                   }
+
+                                   console.log('🛒 Checkout Request:', {
+                                        productIds,
+                                        itemCount: productIds.length,
+                                        total: activeTotal,
+                                        items: activeItems.map(item => ({
+                                             cartItemId: item.id,
+                                             productId: item.product?.id,
+                                             price: item.product?.price || item.price,
+                                             quantity: item.quantity
+                                        }))
+                                   });
+
+                                   // Checkout with selected products (matching web implementation)
+                                   const response = await orderApi.checkout(productIds);
+                                   console.log('✅ Checkout Response:', response);
+
                                    await fetchCart();
                                    await fetchBalance();
 
@@ -84,11 +140,93 @@ export default function CheckoutScreen() {
                                         ]
                                    );
                               } catch (error: any) {
-                                   console.error('Checkout error:', error);
-                                   Alert.alert(
-                                        'Error',
-                                        error.response?.data?.message || error.message || 'Failed to process order'
-                                   );
+                                   console.error('❌ Checkout error:', error);
+                                   console.error('Error details:', {
+                                        status: error.response?.status,
+                                        data: error.response?.data,
+                                        message: error.message,
+                                        config: {
+                                             url: error.config?.url,
+                                             method: error.config?.method,
+                                             data: error.config?.data
+                                        }
+                                   });
+
+                                   const errorResponse = error.response;
+                                   const errorMessage = errorResponse?.data?.message || '';
+
+                                   // Handle 403 - Already purchased products
+                                   if (errorResponse?.status === 403) {
+                                        // Extract product ID from error message
+                                        const productIdMatch = errorMessage.match(/product: ([a-f0-9-]+)/);
+                                        if (productIdMatch && productIdMatch[1]) {
+                                             const purchasedProductId = productIdMatch[1];
+
+                                             // Find the product in our items
+                                             const purchasedProduct = activeItems.find(
+                                                  item => item.product?.id === purchasedProductId
+                                             );
+
+                                             Alert.alert(
+                                                  'Product Already Purchased',
+                                                  purchasedProduct
+                                                       ? `You have already purchased "${purchasedProduct.product?.title}". It will be removed from your cart.`
+                                                       : 'One or more products have already been purchased.',
+                                                  [
+                                                       {
+                                                            text: 'Remove & Continue',
+                                                            onPress: async () => {
+                                                                 // Remove purchased product from cart
+                                                                 if (purchasedProduct) {
+                                                                      await removeItem(purchasedProduct.id);
+                                                                 }
+                                                                 await fetchCart();
+                                                                 router.back();
+                                                            }
+                                                       },
+                                                       {
+                                                            text: 'View Purchases',
+                                                            onPress: () => router.replace('/purchased-orders')
+                                                       }
+                                                  ]
+                                             );
+                                             return;
+                                        }
+
+                                        // Generic 403 error
+                                        Alert.alert(
+                                             'Purchase Failed',
+                                             errorMessage || 'You have already purchased one or more of these products.',
+                                             [
+                                                  { text: 'OK', style: 'cancel' },
+                                                  {
+                                                       text: 'View Purchases',
+                                                       onPress: () => router.replace('/purchased-orders')
+                                                  }
+                                             ]
+                                        );
+                                   }
+                                   // Handle 400 - Validation errors
+                                   else if (errorResponse?.status === 400) {
+                                        Alert.alert(
+                                             'Invalid Order',
+                                             errorMessage || 'Please check your cart and try again.'
+                                        );
+                                   }
+                                   // Handle 404 - Endpoint not found
+                                   else if (errorResponse?.status === 404) {
+                                        Alert.alert(
+                                             'Service Unavailable',
+                                             'Checkout service is temporarily unavailable. Please try again later.'
+                                        );
+                                   }
+                                   // Generic errors
+                                   else {
+                                        Alert.alert(
+                                             'Checkout Failed',
+                                             errorMessage || error.message || 'Failed to process order. Please try again.'
+                                        );
+                                   }
                               } finally {
                                    setProcessing(false);
                               }
@@ -126,7 +264,6 @@ export default function CheckoutScreen() {
                                    <CartItem
                                         key={item.id}
                                         item={item}
-                                        onQuantityChange={updateQuantity}
                                         onRemove={removeItem}
                                         disabled={processing}
                                    />
@@ -154,7 +291,7 @@ export default function CheckoutScreen() {
                                         💰 Wallet
                                    </Text>
                                    <Text style={[styles.paymentBalance, { color: colors.mutedForeground }]}>
-                                        Balance: ${balance.toFixed(2)}
+                                        Balance: {balance.toLocaleString('vi-VN')} ₫
                                    </Text>
                               </View>
                               <Text style={[styles.checkmark, { color: colors.primary }]}>✓</Text>
@@ -168,7 +305,7 @@ export default function CheckoutScreen() {
                                    Subtotal:
                               </Text>
                               <Text style={[styles.totalValue, { color: colors.foreground }]}>
-                                   {Math.round(activeTotal * 25000).toLocaleString('vi-VN')} ₫
+                                   {activeTotal.toLocaleString('vi-VN')} ₫
                               </Text>
                          </View>
                          <View style={styles.totalRow}>
@@ -176,7 +313,7 @@ export default function CheckoutScreen() {
                                    Total:
                               </Text>
                               <Text style={[styles.totalAmount, { color: colors.primary }]}>
-                                   {Math.round(activeTotal * 25000).toLocaleString('vi-VN')} ₫
+                                   {activeTotal.toLocaleString('vi-VN')} ₫
                               </Text>
                          </View>
                     </View>
@@ -214,7 +351,7 @@ export default function CheckoutScreen() {
                               <ActivityIndicator color={colors.primaryForeground} />
                          ) : (
                               <Text style={[styles.checkoutText, { color: colors.primaryForeground }]}>
-                                   Place Order - {Math.round(activeTotal * 25000).toLocaleString('vi-VN')} ₫
+                                   Place Order - {activeTotal.toLocaleString('vi-VN')} ₫
                               </Text>
                          )}
                     </TouchableOpacity>

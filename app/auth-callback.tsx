@@ -9,6 +9,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { authApi } from '@/lib/api/authApi';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
+import { supabase } from '@/lib/supabase';
 
 export default function AuthCallbackScreen() {
      const { colors } = useTheme();
@@ -21,7 +22,42 @@ export default function AuthCallbackScreen() {
 
      const handleOAuthCallback = async () => {
           try {
-               // Extract tokens from URL hash or query params
+               // Check for magic link code first
+               const code = params.code as string;
+
+               if (code) {
+                    // Magic link flow - exchange code for session
+                    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+                    if (error) {
+                         console.error('Code exchange error:', error);
+                         router.replace('/login');
+                         return;
+                    }
+
+                    if (data.session) {
+                         // Session created successfully
+                         // Sync cart if needed
+                         const tempCart = await AsyncStorage.getItem('temp_cart');
+                         if (tempCart) {
+                              try {
+                                   const items = JSON.parse(tempCart);
+                                   const { cartApi } = await import('@/lib/api/cartApi');
+                                   for (const item of items) {
+                                        await cartApi.addItem({ productId: item.productId, quantity: item.quantity });
+                                   }
+                                   await AsyncStorage.removeItem('temp_cart');
+                              } catch (e) {
+                                   console.error('Cart sync error:', e);
+                              }
+                         }
+
+                         router.replace('/(tabs)/forum');
+                         return;
+                    }
+               }
+
+               // OAuth flow - extract tokens from URL hash or query params
                const accessToken = params.access_token as string;
                const refreshToken = params.refresh_token as string;
 
@@ -41,6 +77,7 @@ export default function AuthCallbackScreen() {
                // Navigate to main app
                router.replace('/(tabs)/forum');
           } catch (error) {
+               console.error('Auth callback error:', error);
                router.replace('/login');
           }
      };

@@ -19,9 +19,7 @@ export const endpoints = {
           byPostId: (postId: string) => `${API_PREFIX}/posts/${postId}/like`,
      },
      payment: {
-          paypal: `${API_PREFIX}/payment/paypal/create`,
-          vnpay: `${API_PREFIX}/payment/vnpay/create`,
-          vnpayCallback: `${API_PREFIX}/payment/vnpay-return`,
+          payos: `${API_PREFIX}/payos/create`,
      },
      wallet: `${API_PREFIX}/wallet`,
      paymentHistory: `${API_PREFIX}/payment-history`,
@@ -84,5 +82,13 @@ export const endpoints = {
           addMessage: (ticketId: string) => `${API_PREFIX}/tickets/${ticketId}/messages`,
           close: (ticketId: string) => `${API_PREFIX}/tickets/${ticketId}/close`,
           reopen: (ticketId: string) => `${API_PREFIX}/tickets/${ticketId}/reopen`,
+     },
+     notification: {
+          all: `${API_PREFIX}/notifications`,
+          markAsRead: (id: string) => `${API_PREFIX}/notifications/${id}/read`,
+          markAllAsRead: `${API_PREFIX}/notifications/read-all`,
+     },
+     systemVariables: {
+          discountRate: `${API_PREFIX}/system-variables/discount-rate`,
      },
 };

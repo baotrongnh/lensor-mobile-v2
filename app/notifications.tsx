@@ -3,7 +3,7 @@
  * Display user notifications
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
      View,
      Text,
@@ -11,6 +11,7 @@ import {
      ScrollView,
      TouchableOpacity,
      RefreshControl,
+     ActivityIndicator,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import {
@@ -22,111 +23,70 @@ import {
      Info,
      Package,
      ChevronLeft,
+     Clock,
 } from 'lucide-react-native';
 import { Spacing } from '@/constants/Colors';
 import { formatDate } from '@/lib/utils/dateFormatter';
+import { formatTimeAgo } from '@/lib/utils/timeFormatter';
 import { router } from 'expo-router';
-
-interface Notification {
-     id: string;
-     type: 'order' | 'payment' | 'system' | 'product' | 'success' | 'warning';
-     title: string;
-     message: string;
-     read: boolean;
-     createdAt: string;
-}
-
-// Mock data - replace with API call
-const MOCK_NOTIFICATIONS: Notification[] = [
-     {
-          id: '1',
-          type: 'order',
-          title: 'New Order',
-          message: 'You have received a new order for "Lightroom Preset Pack"',
-          read: false,
-          createdAt: new Date().toISOString(),
-     },
-     {
-          id: '2',
-          type: 'payment',
-          title: 'Payment Received',
-          message: 'You received $45.00 for order #12345',
-          read: false,
-          createdAt: new Date(Date.now() - 3600000).toISOString(),
-     },
-     {
-          id: '3',
-          type: 'success',
-          title: 'Withdrawal Successful',
-          message: 'Your withdrawal of $100.00 has been processed',
-          read: true,
-          createdAt: new Date(Date.now() - 86400000).toISOString(),
-     },
-     {
-          id: '4',
-          type: 'product',
-          title: 'Product Purchased',
-          message: 'Your purchase of "Professional Preset Bundle" is ready to download',
-          read: true,
-          createdAt: new Date(Date.now() - 172800000).toISOString(),
-     },
-     {
-          id: '5',
-          type: 'warning',
-          title: 'Order Reported',
-          message: 'Order #12345 has been reported by the buyer',
-          read: true,
-          createdAt: new Date(Date.now() - 259200000).toISOString(),
-     },
-     {
-          id: '6',
-          type: 'system',
-          title: 'Welcome to Lensor!',
-          message: 'Thank you for joining our community of creators',
-          read: true,
-          createdAt: new Date(Date.now() - 604800000).toISOString(),
-     },
-];
+import { useNotifications, useMarkAsRead, useMarkAllAsRead } from '@/lib/hooks/useNotificationHooks';
+import { Notification } from '@/types/notification';
+import { logger } from '@/lib/utils/logger';
 
 export default function NotificationsScreen() {
      const { colors } = useTheme();
-     const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
+     const { data, isLoading, error, mutate } = useNotifications();
+     const { mutate: markAsRead } = useMarkAsRead();
+     const { mutate: markAllAsRead } = useMarkAllAsRead();
      const [refreshing, setRefreshing] = useState(false);
+
+     // Debug logging
+     useEffect(() => {
+          logger.log('Notifications data:', data);
+          logger.log('Notifications loading:', isLoading);
+          logger.log('Notifications error:', error);
+     }, [data, isLoading, error]);
+
+     const notifications = data?.data?.notifications || [];
+     const unreadCount = data?.data?.meta?.unreadCount || 0;
 
      const handleRefresh = async () => {
           setRefreshing(true);
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await mutate();
           setRefreshing(false);
      };
 
-     const handleMarkAsRead = (id: string) => {
-          setNotifications(prev =>
-               prev.map(notif => (notif.id === id ? { ...notif, read: true } : notif))
-          );
+     const handleMarkAsRead = async (id: string) => {
+          try {
+               await markAsRead(id);
+          } catch (error) {
+               logger.error('Error marking as read:', error);
+          }
      };
 
-     const handleMarkAllAsRead = () => {
-          setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
+     const handleMarkAllAsRead = async () => {
+          try {
+               await markAllAsRead();
+          } catch (error) {
+               logger.error('Error marking all as read:', error);
+          }
      };
 
-     const unreadCount = notifications.filter(n => !n.read).length;
-
-     const getIcon = (type: Notification['type']) => {
-          const iconSize = 24;
+     const getIcon = (type: string) => {
+          const iconSize = 20;
           switch (type) {
+               case 'withdrawal_approved':
+                    return <CheckCircle size={iconSize} color="#10b981" />;
+               case 'withdrawal_rejected':
+                    return <AlertCircle size={iconSize} color="#ef4444" />;
                case 'order':
                     return <ShoppingBag size={iconSize} color={colors.primary} />;
                case 'payment':
                     return <DollarSign size={iconSize} color="#10b981" />;
-               case 'success':
-                    return <CheckCircle size={iconSize} color="#10b981" />;
-               case 'warning':
-                    return <AlertCircle size={iconSize} color="#f59e0b" />;
                case 'product':
                     return <Package size={iconSize} color="#8b5cf6" />;
                default:
-                    return <Info size={iconSize} color={colors.mutedForeground} />;
+                    return <Bell size={iconSize} color={colors.mutedForeground} />;
           }
      };
 
@@ -174,7 +134,11 @@ export default function NotificationsScreen() {
                          />
                     }
                >
-                    {notifications.length === 0 ? (
+                    {isLoading && !refreshing ? (
+                         <View style={styles.centerContent}>
+                              <ActivityIndicator size="large" color={colors.primary} />
+                         </View>
+                    ) : notifications.length === 0 ? (
                          <View style={styles.emptyState}>
                               <Bell size={48} color={colors.mutedForeground} />
                               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
@@ -182,7 +146,7 @@ export default function NotificationsScreen() {
                               </Text>
                          </View>
                     ) : (
-                         notifications.map((notification) => (
+                         notifications.map((notification: Notification) => (
                               <TouchableOpacity
                                    key={notification.id}
                                    style={[
@@ -192,7 +156,7 @@ export default function NotificationsScreen() {
                                              borderColor: colors.border,
                                         },
                                    ]}
-                                   onPress={() => handleMarkAsRead(notification.id)}
+                                   onPress={() => !notification.read && handleMarkAsRead(notification.id)}
                               >
                                    <View style={[styles.iconWrapper, { backgroundColor: colors.background }]}>
                                         {getIcon(notification.type)}
@@ -205,7 +169,7 @@ export default function NotificationsScreen() {
                                                        styles.notificationTitle,
                                                        {
                                                             color: colors.foreground,
-                                                            fontWeight: notification.read ? '500' : 'bold',
+                                                            fontWeight: notification.read ? '500' : '700',
                                                        },
                                                   ]}
                                              >
@@ -226,9 +190,18 @@ export default function NotificationsScreen() {
                                              {notification.message}
                                         </Text>
 
-                                        <Text style={[styles.notificationTime, { color: colors.mutedForeground }]}>
-                                             {formatDate(notification.createdAt)}
-                                        </Text>
+                                        {notification.actionUrl && (
+                                             <Text style={[styles.actionLink, { color: colors.primary }]}>
+                                                  View details →
+                                             </Text>
+                                        )}
+
+                                        <View style={styles.notificationFooter}>
+                                             <Clock size={12} color={colors.mutedForeground} />
+                                             <Text style={[styles.notificationTime, { color: colors.mutedForeground }]}>
+                                                  {formatTimeAgo(notification.time)}
+                                             </Text>
+                                        </View>
                                    </View>
                               </TouchableOpacity>
                          ))
@@ -291,6 +264,12 @@ const styles = StyleSheet.create({
      list: {
           flex: 1,
      },
+     centerContent: {
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingVertical: Spacing.xxl * 2,
+     },
      emptyState: {
           flex: 1,
           alignItems: 'center',
@@ -308,9 +287,9 @@ const styles = StyleSheet.create({
           borderBottomWidth: 1,
      },
      iconWrapper: {
-          width: 48,
-          height: 48,
-          borderRadius: 24,
+          width: 40,
+          height: 40,
+          borderRadius: 20,
           alignItems: 'center',
           justifyContent: 'center',
      },
@@ -324,7 +303,7 @@ const styles = StyleSheet.create({
           marginBottom: 4,
      },
      notificationTitle: {
-          fontSize: 16,
+          fontSize: 15,
           flex: 1,
      },
      unreadDot: {
@@ -334,11 +313,21 @@ const styles = StyleSheet.create({
           marginLeft: Spacing.xs,
      },
      notificationMessage: {
-          fontSize: 14,
-          lineHeight: 20,
+          fontSize: 13,
+          lineHeight: 18,
           marginBottom: 4,
      },
+     actionLink: {
+          fontSize: 13,
+          marginBottom: 6,
+          fontWeight: '500',
+     },
+     notificationFooter: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 4,
+     },
      notificationTime: {
-          fontSize: 12,
+          fontSize: 11,
      },
 });

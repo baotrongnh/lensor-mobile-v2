@@ -1,53 +1,45 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import { useTranslation } from 'react-i18next';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { Bell, CheckCircle, AlertCircle, Clock, Settings } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Spacing, FontSizes, FontWeights } from '@/constants/Colors';
 import { Button } from '@/components/ui/Button';
-
-interface Notification {
-     id: string;
-     type: 'withdrawal_approved' | 'withdrawal_rejected' | 'order' | 'system';
-     title: string;
-     message: string;
-     time: string;
-     read: boolean;
-}
+import { useNotifications, useMarkAsRead, useMarkAllAsRead } from '@/lib/hooks/useNotificationHooks';
+import { Notification } from '@/types/notification';
+import { formatTimeAgo } from '@/lib/utils/timeFormatter';
+import { logger } from '@/lib/utils/logger';
 
 export default function NotificationScreen() {
-     const { t } = useTranslation();
      const { colors } = useTheme();
+     const { data, isLoading, error, mutate } = useNotifications();
+     const { mutate: markAsRead } = useMarkAsRead();
+     const { mutate: markAllAsRead } = useMarkAllAsRead();
+     const [refreshing, setRefreshing] = React.useState(false);
 
-     // Mock data
-     const notifications: Notification[] = [
-          {
-               id: '1',
-               type: 'withdrawal_approved',
-               title: 'Rút tiền thành công',
-               message: 'Yêu cầu rút tiền 500,000đ đã được duyệt',
-               time: new Date().toISOString(),
-               read: false,
-          },
-          {
-               id: '2',
-               type: 'order',
-               title: 'Đơn hàng mới',
-               message: 'Bạn có đơn hàng mới từ Nguyễn Văn A',
-               time: new Date(Date.now() - 3600000).toISOString(),
-               read: false,
-          },
-          {
-               id: '3',
-               type: 'system',
-               title: 'Cập nhật hệ thống',
-               message: 'Hệ thống đã được cập nhật phiên bản mới',
-               time: new Date(Date.now() - 86400000).toISOString(),
-               read: true,
-          },
-     ];
+     const notifications = data?.data?.notifications || [];
+     const unreadCount = data?.data?.meta?.unreadCount || 0;
 
-     const unreadCount = notifications.filter(n => !n.read).length;
+     const handleRefresh = async () => {
+          setRefreshing(true);
+          await mutate();
+          setRefreshing(false);
+     };
+
+     const handleMarkAsRead = async (id: string) => {
+          try {
+               await markAsRead(id);
+          } catch (error) {
+               logger.error('Error marking as read:', error);
+          }
+     };
+
+     const handleMarkAllAsRead = async () => {
+          try {
+               await markAllAsRead();
+          } catch (error) {
+               logger.error('Error marking all as read:', error);
+          }
+     };
 
      const getNotificationIcon = (type: string) => {
           switch (type) {
@@ -60,23 +52,6 @@ export default function NotificationScreen() {
           }
      };
 
-     const formatTime = (time: string) => {
-          try {
-               const date = new Date(time);
-               const now = new Date();
-               const diff = now.getTime() - date.getTime();
-               const minutes = Math.floor(diff / 60000);
-               const hours = Math.floor(diff / 3600000);
-               const days = Math.floor(diff / 86400000);
-
-               if (minutes < 60) return `${minutes} phút trước`;
-               if (hours < 24) return `${hours} giờ trước`;
-               return `${days} ngày trước`;
-          } catch {
-               return time;
-          }
-     };
-
      const renderNotificationItem = ({ item }: { item: Notification }) => (
           <TouchableOpacity
                style={[
@@ -86,6 +61,11 @@ export default function NotificationScreen() {
                          borderBottomColor: colors.border
                     }
                ]}
+               onPress={() => {
+                    if (!item.read) {
+                         handleMarkAsRead(item.id);
+                    }
+               }}
           >
                <View style={styles.iconContainer}>
                     {getNotificationIcon(item.type)}
@@ -105,12 +85,35 @@ export default function NotificationScreen() {
                     <View style={styles.timeContainer}>
                          <Clock size={12} color={colors.mutedForeground} />
                          <Text style={[styles.notificationTime, { color: colors.mutedForeground }]}>
-                              {formatTime(item.time)}
+                              {formatTimeAgo(item.time)}
                          </Text>
                     </View>
                </View>
           </TouchableOpacity>
      );
+
+     if (isLoading && !refreshing) {
+          return (
+               <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+                    <ActivityIndicator size="large" color={colors.primary} />
+               </View>
+          );
+     }
+
+     if (error) {
+          return (
+               <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+                    <AlertCircle size={48} color={colors.destructive} />
+                    <Text style={[styles.emptyText, { color: colors.foreground, marginTop: Spacing.md }]}>Không thể tải thông báo</Text>
+                    <Button
+                         onPress={() => mutate()}
+                         style={{ marginTop: Spacing.md }}
+                    >
+                         Thử lại
+                    </Button>
+               </View>
+          );
+     }
 
      return (
           <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -135,7 +138,7 @@ export default function NotificationScreen() {
 
                {unreadCount > 0 && (
                     <View style={[styles.actionBar, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-                         <Button variant="outline" size="sm">
+                         <Button variant="outline" size="sm" onPress={handleMarkAllAsRead}>
                               Đánh dấu tất cả đã đọc
                          </Button>
                     </View>
@@ -154,6 +157,13 @@ export default function NotificationScreen() {
                          renderItem={renderNotificationItem}
                          keyExtractor={item => item.id}
                          contentContainerStyle={styles.listContent}
+                         refreshControl={
+                              <RefreshControl
+                                   refreshing={refreshing}
+                                   onRefresh={handleRefresh}
+                                   colors={[colors.primary]}
+                              />
+                         }
                     />
                )}
           </View>

@@ -3,7 +3,7 @@
  * Trang chi tiết của marketplace item
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
      View,
      Text,
@@ -16,12 +16,13 @@ import {
      Alert,
 } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
-import { Star, ShoppingCart, ArrowLeft, User } from 'lucide-react-native';
+import { Star, ShoppingCart, ArrowLeft, User, CheckCircle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Spacing, FontSizes, FontWeights } from '@/constants/Colors';
 import { useMarketplaceDetail } from '@/lib/hooks/useMarketplaceHooks';
 import { useCartStore } from '@/stores/cartStore';
 import { useChatStore } from '@/stores/chatStore';
+import { orderApi } from '@/lib/api/orderApi';
 import { BASE_URL, DEFAULT_IMAGE } from '@/constants';
 import { EmptyState } from '@/components/empty/EmptyState';
 import { ImageComparison } from '@/components/marketplace/ImageComparison';
@@ -36,10 +37,44 @@ export default function MarketplaceDetailScreen() {
      const { data: item, isLoading, error } = useMarketplaceDetail(id as string);
      const [selectedImageIndex, setSelectedImageIndex] = useState(0);
      const [imageError, setImageError] = useState(false);
-     const { addToCart } = useCartStore();
+     const { items: cartItems, addToCart, fetchCart } = useCartStore();
      const { createDirectChat } = useChatStore();
      const [isAdding, setIsAdding] = useState(false);
      const [isCreatingChat, setIsCreatingChat] = useState(false);
+     const [purchasedOrders, setPurchasedOrders] = useState<any[]>([]);
+     const [loadingPurchased, setLoadingPurchased] = useState(true);
+
+     // Check if product is in cart
+     const isInCart = useMemo(() => {
+          if (!cartItems || !id) return false;
+          return cartItems.some(item => item.product?.id === id);
+     }, [cartItems, id]);
+
+     // Check if user already bought this product
+     const isUserBought = useMemo(() => {
+          if (!purchasedOrders || !id) return false;
+          return purchasedOrders.some(order =>
+               order.items?.some((item: any) => item.productId === id)
+          );
+     }, [purchasedOrders, id]);
+
+     // Fetch cart and purchased orders on mount
+     React.useEffect(() => {
+          fetchCart();
+
+          const fetchPurchasedOrders = async () => {
+               try {
+                    const response = await orderApi.getAllOrders();
+                    setPurchasedOrders(response.data || []);
+               } catch (error) {
+                    console.error('Failed to fetch purchased orders:', error);
+               } finally {
+                    setLoadingPurchased(false);
+               }
+          };
+
+          fetchPurchasedOrders();
+     }, [fetchCart]);
 
      const getImageSrc = (imagePath: string | undefined) => {
           if (imageError || !imagePath) return DEFAULT_IMAGE;
@@ -49,22 +84,95 @@ export default function MarketplaceDetailScreen() {
 
      const handleAddToCart = async () => {
           if (!id) return;
+
+          // Check if already in cart
+          if (isInCart) {
+               Alert.alert(
+                    'Already in Cart',
+                    'This product is already in your cart',
+                    [
+                         { text: 'Continue Shopping', style: 'cancel' },
+                         { text: 'View Cart', onPress: () => router.push('/cart') }
+                    ]
+               );
+               return;
+          }
+
+          // Check if already purchased
+          if (isUserBought) {
+               Alert.alert(
+                    'Already Purchased',
+                    'You have already purchased this product',
+                    [
+                         { text: 'OK', style: 'cancel' },
+                         { text: 'View Purchases', onPress: () => router.push('/purchased-orders') }
+                    ]
+               );
+               return;
+          }
+
           setIsAdding(true);
           try {
                await addToCart(id as string, 1);
-               Alert.alert('Success', 'Added to cart successfully', [
-                    { text: 'Continue Shopping', style: 'cancel' },
-                    { text: 'View Cart', onPress: () => router.push('/cart') }
-               ]);
-          } catch (error) {
-               Alert.alert('Error', 'Failed to add to cart. Please try again.');
+               await fetchCart(); // Refresh cart
+
+               Alert.alert(
+                    'Success',
+                    'Added to cart successfully',
+                    [
+                         { text: 'Continue Shopping', style: 'cancel' },
+                         { text: 'View Cart', onPress: () => router.push('/cart') }
+                    ]
+               );
+          } catch (error: any) {
+               console.error('Add to cart error:', error);
+
+               // Handle 403 - Product already in cart (from backend)
+               if (error.response?.status === 403) {
+                    const errorMsg = error.response?.data?.message || '';
+
+                    if (errorMsg.includes('already in cart') || errorMsg.includes('already exists')) {
+                         Alert.alert(
+                              'Already in Cart',
+                              'This product is already in your cart',
+                              [
+                                   { text: 'Continue Shopping', style: 'cancel' },
+                                   { text: 'View Cart', onPress: () => router.push('/cart') }
+                              ]
+                         );
+                         // Refresh cart to update UI
+                         await fetchCart();
+                         return;
+                    }
+
+                    if (errorMsg.includes('already purchased') || errorMsg.includes('already bought')) {
+                         Alert.alert(
+                              'Already Purchased',
+                              'You have already purchased this product',
+                              [
+                                   { text: 'OK', style: 'cancel' },
+                                   { text: 'View Purchases', onPress: () => router.push('/purchased-orders') }
+                              ]
+                         );
+                         return;
+                    }
+               }
+
+               // Generic error
+               Alert.alert(
+                    'Error',
+                    error.response?.data?.message || 'Failed to add to cart. Please try again.'
+               );
           } finally {
                setIsAdding(false);
           }
      };
 
      const handleContactSeller = async () => {
-          if (!item?.userId) {
+          // Try to get userId from item.author or item.userId
+          const sellerId = (item as any)?.userId || (item as any)?.author?.id || (item as any)?.authorId;
+
+          if (!sellerId) {
                Alert.alert('Error', 'Seller information not available');
                return;
           }
@@ -72,12 +180,13 @@ export default function MarketplaceDetailScreen() {
           setIsCreatingChat(true);
           try {
                // Create or get direct chat with seller
-               await createDirectChat(item.userId);
+               await createDirectChat(sellerId);
 
-               // Navigate to chat after creation
-               router.push('/(tabs)/message');
+               // Wait a moment for store to update
+               await new Promise(resolve => setTimeout(resolve, 300));
 
-               Alert.alert('Success', 'Chat room created. You can now message the seller.');
+               // Navigate to chat detail with the seller's userId
+               router.push(`/chat-detail/${sellerId}`);
           } catch (error) {
                Alert.alert('Error', 'Failed to create chat. Please try again.');
           } finally {
@@ -286,49 +395,113 @@ export default function MarketplaceDetailScreen() {
                                    </View>
                               </View>
                          )}
+
+                         {/* In Cart Badge - giống web */}
+                         {isInCart && (
+                              <View style={[styles.statusBadge, {
+                                   backgroundColor: '#f0fdf4',
+                                   borderColor: '#86efac'
+                              }]}>
+                                   <CheckCircle size={20} color="#16a34a" />
+                                   <View style={{ flex: 1 }}>
+                                        <Text style={[styles.statusBadgeTitle, { color: '#166534' }]}>
+                                             Already in your cart
+                                        </Text>
+                                        <Text style={[styles.statusBadgeDesc, { color: '#15803d' }]}>
+                                             This preset is ready for checkout
+                                        </Text>
+                                   </View>
+                                   <TouchableOpacity
+                                        style={[styles.statusBadgeButton, { borderColor: '#86efac' }]}
+                                        onPress={() => router.push('/cart')}
+                                   >
+                                        <Text style={[styles.statusBadgeButtonText, { color: '#16a34a' }]}>
+                                             View Cart
+                                        </Text>
+                                   </TouchableOpacity>
+                              </View>
+                         )}
+
+                         {/* Already Purchased Badge */}
+                         {isUserBought && (
+                              <View style={[styles.statusBadge, {
+                                   backgroundColor: '#eff6ff',
+                                   borderColor: '#93c5fd'
+                              }]}>
+                                   <CheckCircle size={20} color="#2563eb" />
+                                   <View style={{ flex: 1 }}>
+                                        <Text style={[styles.statusBadgeTitle, { color: '#1e40af' }]}>
+                                             Already purchased
+                                        </Text>
+                                        <Text style={[styles.statusBadgeDesc, { color: '#1d4ed8' }]}>
+                                             You own this product
+                                        </Text>
+                                   </View>
+                                   <TouchableOpacity
+                                        style={[styles.statusBadgeButton, { borderColor: '#93c5fd' }]}
+                                        onPress={() => router.push('/purchased-orders')}
+                                   >
+                                        <Text style={[styles.statusBadgeButtonText, { color: '#2563eb' }]}>
+                                             View Purchases
+                                        </Text>
+                                   </TouchableOpacity>
+                              </View>
+                         )}
                     </View>
                </ScrollView>
 
                {/* Bottom Action Bar */}
-               <View style={[styles.bottomBar, {
-                    backgroundColor: colors.card,
-                    borderTopColor: colors.border,
-               }]}>
-                    <TouchableOpacity
-                         style={[styles.contactButton, {
-                              backgroundColor: colors.card,
-                              borderColor: colors.primary,
-                         }]}
-                         onPress={handleContactSeller}
-                         activeOpacity={0.8}
-                         disabled={isCreatingChat}
-                    >
-                         {isCreatingChat ? (
-                              <ActivityIndicator size="small" color={colors.primary} />
-                         ) : (
-                              <>
-                                   <MessageCircle size={20} color={colors.primary} />
-                                   <Text style={[styles.contactText, { color: colors.primary }]}>Contact</Text>
-                              </>
-                         )}
-                    </TouchableOpacity>
+               {!isUserBought && (
+                    <View style={[styles.bottomBar, {
+                         backgroundColor: colors.card,
+                         borderTopColor: colors.border,
+                    }]}>
+                         <TouchableOpacity
+                              style={[styles.contactButton, {
+                                   backgroundColor: colors.card,
+                                   borderColor: colors.primary,
+                              }]}
+                              onPress={handleContactSeller}
+                              activeOpacity={0.8}
+                              disabled={isCreatingChat}
+                         >
+                              {isCreatingChat ? (
+                                   <ActivityIndicator size="small" color={colors.primary} />
+                              ) : (
+                                   <>
+                                        <MessageCircle size={20} color={colors.primary} />
+                                        <Text style={[styles.contactText, { color: colors.primary }]}>Contact</Text>
+                                   </>
+                              )}
+                         </TouchableOpacity>
 
-                    <TouchableOpacity
-                         style={[styles.addToCartButton, { backgroundColor: colors.primary }]}
-                         onPress={handleAddToCart}
-                         activeOpacity={0.8}
-                         disabled={isAdding}
-                    >
-                         {isAdding ? (
-                              <ActivityIndicator size="small" color="#fff" />
-                         ) : (
-                              <>
-                                   <ShoppingCart size={20} color="#fff" />
-                                   <Text style={styles.addToCartText}>Add to Cart</Text>
-                              </>
-                         )}
-                    </TouchableOpacity>
-               </View>
+                         <TouchableOpacity
+                              style={[
+                                   styles.addToCartButton,
+                                   { backgroundColor: isInCart ? colors.muted : colors.primary }
+                              ]}
+                              onPress={isInCart ? () => router.push('/cart') : handleAddToCart}
+                              activeOpacity={0.8}
+                              disabled={isAdding || loadingPurchased}
+                         >
+                              {isAdding ? (
+                                   <ActivityIndicator size="small" color="#fff" />
+                              ) : isInCart ? (
+                                   <>
+                                        <CheckCircle size={20} color={colors.foreground} />
+                                        <Text style={[styles.addToCartText, { color: colors.foreground }]}>
+                                             In Cart
+                                        </Text>
+                                   </>
+                              ) : (
+                                   <>
+                                        <ShoppingCart size={20} color="#fff" />
+                                        <Text style={styles.addToCartText}>Add to Cart</Text>
+                                   </>
+                              )}
+                         </TouchableOpacity>
+                    </View>
+               )}
           </View>
      );
 }
@@ -459,6 +632,33 @@ const styles = StyleSheet.create({
      featureText: {
           fontSize: FontSizes.sm,
           fontWeight: FontWeights.medium,
+     },
+     statusBadge: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: Spacing.sm,
+          padding: Spacing.md,
+          borderRadius: 12,
+          borderWidth: 1,
+          marginTop: Spacing.md,
+     },
+     statusBadgeTitle: {
+          fontSize: FontSizes.sm,
+          fontWeight: FontWeights.semibold,
+          marginBottom: 2,
+     },
+     statusBadgeDesc: {
+          fontSize: FontSizes.xs,
+     },
+     statusBadgeButton: {
+          paddingHorizontal: Spacing.sm,
+          paddingVertical: Spacing.xs,
+          borderRadius: 6,
+          borderWidth: 1,
+     },
+     statusBadgeButtonText: {
+          fontSize: FontSizes.xs,
+          fontWeight: FontWeights.semibold,
      },
      bottomBar: {
           position: 'absolute',

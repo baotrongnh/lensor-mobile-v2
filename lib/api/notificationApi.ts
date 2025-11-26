@@ -1,3 +1,6 @@
+import { apiClient } from './client';
+import { endpoints } from './endpoints';
+
 export interface NotificationMetadata {
      amount?: string;
      reason?: string;
@@ -40,3 +43,18 @@ export interface NotificationResponse {
      };
      statusCode: number;
 }
+
+export const notificationApi = {
+     async getAll(): Promise<NotificationResponse> {
+          const res = await apiClient.get<NotificationResponse>(endpoints.notification.all);
+          return res.data;
+     },
+
+     async markAsRead(id: string): Promise<void> {
+          await apiClient.patch(endpoints.notification.markAsRead(id));
+     },
+
+     async markAllAsRead(): Promise<void> {
+          await apiClient.patch(endpoints.notification.markAllAsRead);
+     },
+};

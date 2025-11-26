@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { DEV_CONFIG } from '@/lib/auth/devToken';
 import { logger } from '@/lib/utils/logger';
+import { useUserStore } from '@/stores/userStore';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -19,11 +20,12 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const segments = useSegments();
+  const { setUser } = useUserStore();
 
   useEffect(() => {
     // If using dev token, skip authentication and go directly to app
     if (DEV_CONFIG.USE_DEV_TOKEN) {
-      setSession({
+      const devSession = {
         access_token: DEV_CONFIG.DEV_ACCESS_TOKEN,
         token_type: 'bearer',
         user: {
@@ -34,22 +36,56 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
             avatar_url: DEV_CONFIG.DEV_USER.avatar_url,
           },
         },
-      } as Session);
+      } as Session;
+
+      setSession(devSession);
+
+      // Set user in store
+      setUser({
+        id: DEV_CONFIG.DEV_USER.id,
+        email: DEV_CONFIG.DEV_USER.email,
+        name: DEV_CONFIG.DEV_USER.full_name,
+        avatarUrl: DEV_CONFIG.DEV_USER.avatar_url,
+      });
+
       setLoading(false);
       return;
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+
+      // Set user in store from session
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || 'User',
+          avatarUrl: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture,
+        });
+      }
+
       setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+
+      // Update user in store when auth state changes
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || 'User',
+          avatarUrl: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture,
+        });
+      } else {
+        setUser(null);
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [setUser]);
 
   // Removed: Deep link handler for payment returns (now using WebView modal approach)
 
@@ -99,6 +135,17 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
           if (data.session) {
             setSession(data.session);
+
+            // Set user in store from OAuth callback
+            if (data.session.user) {
+              setUser({
+                id: data.session.user.id,
+                email: data.session.user.email || '',
+                name: data.session.user.user_metadata?.full_name || data.session.user.user_metadata?.name || 'User',
+                avatarUrl: data.session.user.user_metadata?.avatar_url || data.session.user.user_metadata?.picture,
+              });
+            }
+
             router.replace('/(tabs)/forum');
           }
         } catch (error) {
@@ -120,7 +167,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       subscription.remove();
     };
-  }, [router]);
+  }, [router, setUser]);
 
   return <>{children}</>;
 }
@@ -160,6 +207,7 @@ function RootStack() {
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="my-posts" options={{ headerShown: false }} />
       <Stack.Screen name="support" options={{ headerShown: false }} />
+      <Stack.Screen name="support-detail/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
       <Stack.Screen name="saved-posts" options={{ headerShown: false }} />
     </Stack>

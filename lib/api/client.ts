@@ -39,6 +39,17 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
      (response) => response,
      async (error) => {
+          // Log detailed error for debugging
+          if (error.response) {
+               console.error('❌ API Error:', {
+                    status: error.response.status,
+                    url: error.config?.url,
+                    method: error.config?.method,
+                    data: error.config?.data,
+                    response: error.response.data
+               });
+          }
+
           if (error.response?.status === 401) {
                // Only sign out if not using dev token
                if (!DEV_CONFIG.USE_DEV_TOKEN) {

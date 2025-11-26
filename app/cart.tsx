@@ -3,7 +3,7 @@
  * Shopping cart with selection and checkout
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
      View,
      Text,
@@ -19,15 +19,48 @@ import { Spacing } from '@/constants/Colors';
 import { useCartStore } from '@/stores/cartStore';
 import { router } from 'expo-router';
 import { CartItem } from '@/components/cart/CartItem';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function CartScreen() {
      const { colors } = useTheme();
-     const { items, count, loading, fetchCart, clearCart, removeItem } = useCartStore();
+     const { items, count, loading, fetchCart, clearCart, removeItem, addToCart } = useCartStore();
      const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+     const hasSyncedTempCart = useRef(false);
 
      useEffect(() => {
           fetchCart();
      }, [fetchCart]);
+
+     // Sync temp cart after login
+     useEffect(() => {
+          const syncTempCart = async () => {
+               if (hasSyncedTempCart.current || loading) return;
+
+               try {
+                    const tempCartJson = await AsyncStorage.getItem('temp_cart');
+                    if (!tempCartJson) return;
+
+                    const tempCartItem = JSON.parse(tempCartJson);
+
+                    // Check if item already exists in cart
+                    const itemExists = items.some(item => item.product?.id === tempCartItem.productId);
+
+                    if (!itemExists) {
+                         hasSyncedTempCart.current = true;
+                         await addToCart(tempCartItem.productId, tempCartItem.quantity || 1);
+                         Alert.alert('Success', 'Cart item synced!');
+                    }
+
+                    // Clean up temp cart
+                    await AsyncStorage.removeItem('temp_cart');
+                    hasSyncedTempCart.current = true;
+               } catch (error) {
+                    console.error('Error syncing temp cart:', error);
+               }
+          };
+
+          syncTempCart();
+     }, [items, loading, addToCart]);
 
      const activeItems = items.filter(item => item.product?.status === 'active');
      const selectedCartItems = items.filter(item => selectedItems.has(item.id));

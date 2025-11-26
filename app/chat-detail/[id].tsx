@@ -25,16 +25,18 @@ export default function ChatRoomScreen() {
      const { colors } = useTheme();
      const router = useRouter();
      const params = useLocalSearchParams();
-     const roomId = params.id as string;
+     const paramId = params.id as string; // Could be roomId or userId
 
      const [messageText, setMessageText] = React.useState('');
      const [sending, setSending] = React.useState(false);
      const [currentUserId, setCurrentUserId] = React.useState<string>('');
      const [isTyping, setIsTyping] = React.useState(false);
+     const [roomId, setRoomId] = React.useState<string>('');
+     const [targetUserId, setTargetUserId] = React.useState<string>(''); // For new chats
      const flatListRef = React.useRef<FlatList>(null);
      const typingTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-     const { currentRoom, messages, loading, fetchMessages, sendMessage, addMessage } = useChatStore();
+     const { currentRoom, messages, loading, fetchMessages, sendMessage, addMessage, createDirectChat, rooms, fetchRooms } = useChatStore();
 
      // Get current user ID
      React.useEffect(() => {
@@ -46,6 +48,66 @@ export default function ChatRoomScreen() {
           };
           getCurrentUser();
      }, []);
+
+     // Initialize room - handle both roomId and userId
+     React.useEffect(() => {
+          const initializeRoom = async () => {
+               if (!paramId || !currentUserId) return;
+
+               try {
+                    logger.log('=== INITIALIZING CHAT ROOM ===');
+                    logger.log('Param ID:', paramId);
+                    logger.log('Current User ID:', currentUserId);
+                    logger.log('Existing rooms:', rooms.length);
+
+                    // First, check if paramId is already a room ID
+                    const existingRoom = rooms.find(r => r.id === paramId);
+
+                    if (existingRoom) {
+                         // It's a valid room ID - use it directly
+                         logger.log('Using existing room ID:', paramId);
+                         setRoomId(paramId);
+                         setTargetUserId(''); // Clear target user
+                         return;
+                    }
+
+                    // If not a room ID, treat as userId and look for direct chat
+                    logger.log('Param might be userId, searching for direct chat...');
+                    const directRoom = rooms.find(r =>
+                         r.type === 'direct' &&
+                         r.participantIds &&
+                         r.participantIds.includes(paramId)
+                    );
+
+                    if (directRoom) {
+                         logger.log('Found existing direct chat room:', directRoom.id);
+                         setRoomId(directRoom.id);
+                         setTargetUserId(''); // Clear target user
+                         return;
+                    }
+
+                    // No existing room found - set target user for new chat
+                    // Don't call API, just let user send first message
+                    logger.log('No existing room. Will create when sending first message.');
+                    setTargetUserId(paramId);
+                    setRoomId(''); // No room yet
+               } catch (error) {
+                    logger.error('Error initializing room:', error);
+                    Alert.alert(
+                         'Error',
+                         'Failed to initialize chat. Please try again.',
+                         [{ text: 'OK', onPress: () => router.back() }]
+                    );
+               }
+          };
+
+          if (currentUserId && rooms.length === 0) {
+               logger.log('Fetching rooms first...');
+               fetchRooms().then(initializeRoom);
+          } else if (currentUserId) {
+               initializeRoom();
+          }
+     }, [paramId, currentUserId, rooms]);
 
      // Initialize socket connection and join room
      React.useEffect(() => {
@@ -61,12 +123,14 @@ export default function ChatRoomScreen() {
                // Only add real messages from socket (not temp optimistic ones)
                if (message.id && !message.id.toString().startsWith('temp-')) {
                     // Remove any temp message for this content (optimistic update cleanup)
-                    const tempMessages = messages.filter(m => m.id.toString().startsWith('temp-'));
-                    tempMessages.forEach(tempMsg => {
-                         if (tempMsg.content === message.content && tempMsg.userId === message.userId) {
-                              // Will be replaced by real message
-                         }
-                    });
+                    if (messages && Array.isArray(messages)) {
+                         const tempMessages = messages.filter(m => m.id.toString().startsWith('temp-'));
+                         tempMessages.forEach(tempMsg => {
+                              if (tempMsg.content === message.content && tempMsg.userId === message.userId) {
+                                   // Will be replaced by real message
+                              }
+                         });
+                    }
 
                     addMessage(message);
                     setTimeout(() => {
@@ -104,43 +168,79 @@ export default function ChatRoomScreen() {
           if (!messageText.trim() || sending || !currentUserId) return;
 
           const text = messageText.trim();
-          const tempMessageId = `temp-${Date.now()}`;
           setMessageText('');
           setSending(true);
 
           try {
-               // Create optimistic message for immediate UI update
-               const { data: { user } } = await supabase.auth.getUser();
-               const optimisticMessage: ChatMessage = {
-                    id: tempMessageId,
-                    content: text,
-                    userId: currentUserId,
-                    roomId,
-                    createdAt: new Date().toISOString(),
-                    user: {
-                         id: currentUserId,
-                         name: user?.user_metadata?.full_name || user?.user_metadata?.name || 'You',
-                         avatar: user?.user_metadata?.avatar_url || user?.user_metadata?.picture || '',
-                    },
-               };
+               // If we don't have a roomId yet (new chat), create room first
+               if (!roomId && targetUserId) {
+                    logger.log('Creating new room via API for first message...');
+                    try {
+                         await createDirectChat(targetUserId);
 
-               // Add optimistic update immediately
-               addMessage(optimisticMessage);
+                         // Wait a bit for store to update
+                         await new Promise(resolve => setTimeout(resolve, 500));
 
-               // Scroll to bottom immediately
-               setTimeout(() => {
-                    flatListRef.current?.scrollToEnd({ animated: true });
-               }, 100);
+                         if (currentRoom) {
+                              logger.log('Room created:', currentRoom.id);
+                              setRoomId(currentRoom.id);
+                              setTargetUserId('');
 
-               // Send via socket (backend will persist and broadcast)
-               await socketService.sendMessage(roomId, text);
+                              // Now send the message via socket with new roomId
+                              await socketService.sendMessage(currentRoom.id, text);
 
-               // Stop typing indicator
-               socketService.sendTyping(roomId, false);
+                              // Refresh rooms list
+                              fetchRooms();
+                         } else {
+                              throw new Error('Failed to create room');
+                         }
+                    } catch (error: any) {
+                         logger.error('Failed to create room:', error);
+                         Alert.alert(
+                              'Cannot Send Message',
+                              'Unable to start chat. This feature may not be available yet.',
+                              [{ text: 'OK' }]
+                         );
+                         setMessageText(text); // Restore message
+                         return;
+                    }
+               } else if (roomId) {
+                    // Room exists - send normally
+                    const tempMessageId = `temp-${Date.now()}`;
+
+                    // Create optimistic message for immediate UI update
+                    const { data: { user } } = await supabase.auth.getUser();
+                    const optimisticMessage: ChatMessage = {
+                         id: tempMessageId,
+                         content: text,
+                         userId: currentUserId,
+                         roomId,
+                         createdAt: new Date().toISOString(),
+                         user: {
+                              id: currentUserId,
+                              name: user?.user_metadata?.full_name || user?.user_metadata?.name || 'You',
+                              avatar: user?.user_metadata?.avatar_url || user?.user_metadata?.picture || '',
+                         },
+                    };
+
+                    // Add optimistic update immediately
+                    addMessage(optimisticMessage);
+
+                    // Scroll to bottom immediately
+                    setTimeout(() => {
+                         flatListRef.current?.scrollToEnd({ animated: true });
+                    }, 100);
+
+                    // Send via socket (backend will persist and broadcast)
+                    await socketService.sendMessage(roomId, text);
+
+                    // Stop typing indicator
+                    socketService.sendTyping(roomId, false);
+               }
           } catch (error) {
                logger.error('Failed to send message:', error);
                Alert.alert('Error', 'Failed to send message. Please try again.');
-               // Note: Optimistic message remains, will be replaced by real one from socket
+               setMessageText(text); // Restore message
           } finally {
                setSending(false);
           }
@@ -206,18 +306,29 @@ export default function ChatRoomScreen() {
                     </TouchableOpacity>
 
                     <View style={styles.headerInfo}>
-                         {currentRoom && currentRoom.participants[0] && (
-                              <>
-                                   <Image
-                                        source={{
-                                             uri: currentRoom.participants[0].avatar || 'https://via.placeholder.com/40',
-                                        }}
-                                        style={styles.headerAvatar}
-                                   />
-                                   <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-                                        {currentRoom.participants[0].name || currentRoom.name}
-                                   </Text>
-                              </>
+                         {currentRoom && currentRoom.participants && currentRoom.participants.length > 0 && (() => {
+                              // Find OTHER participant (not current user)
+                              const otherParticipant = currentRoom.participants.find(p => p.id !== currentUserId);
+                              const displayParticipant = otherParticipant || currentRoom.participants[0];
+
+                              return (
+                                   <>
+                                        <Image
+                                             source={{
+                                                  uri: displayParticipant?.avatar || 'https://via.placeholder.com/40',
+                                             }}
+                                             style={styles.headerAvatar}
+                                        />
+                                        <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+                                             {displayParticipant?.name || currentRoom.name || 'Chat'}
+                                        </Text>
+                                   </>
+                              );
+                         })()}
+                         {(!currentRoom || !currentRoom.participants || currentRoom.participants.length === 0) && (
+                              <Text style={[styles.headerTitle, { color: colors.foreground }]}>
+                                   Chat
+                              </Text>
                          )}
                     </View>
 
@@ -225,14 +336,23 @@ export default function ChatRoomScreen() {
                </View>
 
                {/* Messages List */}
-               {loading && messages.length === 0 ? (
+               {loading && (!messages || messages.length === 0) ? (
                     <View style={styles.centerContent}>
                          <ActivityIndicator size="large" color={colors.primary} />
+                    </View>
+               ) : !roomId && targetUserId ? (
+                    <View style={styles.centerContent}>
+                         <Text style={[styles.emptyStateText, { color: colors.mutedForeground }]}>
+                              No messages yet
+                         </Text>
+                         <Text style={[styles.emptyStateSubtext, { color: colors.mutedForeground }]}>
+                              Send a message to start the conversation
+                         </Text>
                     </View>
                ) : (
                     <FlatList
                          ref={flatListRef}
-                         data={messages}
+                         data={messages || []}
                          renderItem={renderMessage}
                          keyExtractor={(item) => item.id.toString()}
                          contentContainerStyle={styles.messagesList}
@@ -336,6 +456,16 @@ const styles = StyleSheet.create({
           flex: 1,
           justifyContent: 'center',
           alignItems: 'center',
+          padding: Spacing.xl,
+     },
+     emptyStateText: {
+          fontSize: 18,
+          fontWeight: '600',
+          marginBottom: Spacing.sm,
+     },
+     emptyStateSubtext: {
+          fontSize: 14,
+          textAlign: 'center',
      },
      messagesList: {
           padding: Spacing.md,

@@ -108,13 +108,40 @@ export const useChatStore = create<ChatStore>((set, get) => ({
      createDirectChat: async (otherUserId: string) => {
           set({ loading: true, error: null });
           try {
+               console.log('Creating direct chat with user:', otherUserId);
                const response = await chatApi.createDirectChat(otherUserId);
+               console.log('Direct chat response:', response);
+
                if (response.data) {
-                    set({ currentRoom: response.data, loading: false });
+                    // Also add the room to the rooms list if not already there
+                    const exists = get().rooms.find(r => r.id === response.data.id);
+                    if (!exists) {
+                         set((state) => ({
+                              rooms: [...state.rooms, response.data],
+                              currentRoom: response.data,
+                              loading: false
+                         }));
+                    } else {
+                         set({ currentRoom: response.data, loading: false });
+                    }
+               } else {
+                    set({
+                         loading: false,
+                         error: 'No data returned from server'
+                    });
+                    throw new Error('No data returned from server');
                }
           } catch (error: any) {
+               console.error('Error creating direct chat:', error);
+               console.error('Error response:', error.response?.data);
+               console.error('Error status:', error.response?.status);
+
+               const errorMessage = error.response?.data?.message ||
+                    error.message ||
+                    'Failed to create chat';
+
                set({
-                    error: error.message || 'Failed to create chat',
+                    error: errorMessage,
                     loading: false,
                });
                throw error;

@@ -227,7 +227,7 @@ export default function SupportScreen() {
                               <TouchableOpacity
                                    key={ticket.id}
                                    style={[styles.ticketCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-                                   onPress={() => router.push(`/support/${ticket.id}` as any)}
+                                   onPress={() => router.push(`/support-detail/${ticket.id}` as any)}
                               >
                                    <View style={styles.ticketHeader}>
                                         <Text style={[styles.ticketId, { color: colors.mutedForeground }]}>

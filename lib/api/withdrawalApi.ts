@@ -53,6 +53,26 @@ export const bankCardApi = {
 
 export const withdrawalApi = {
      /**
+      * Check withdrawal amount with dynamic fees
+      */
+     checkWithdrawal: async (orderIds: string[]): Promise<{
+          totalAmount: number;
+          discountAmount: number;
+          payableAmount: number;
+     }> => {
+          const response = await apiClient.post<{
+               data: {
+                    data: {
+                         totalAmount: number;
+                         discountAmount: number;
+                         payableAmount: number;
+                    };
+               };
+          }>(`${endpoints.withdrawal.all}/check`, { orderIds });
+          return response.data.data.data;
+     },
+
+     /**
       * Create a new withdrawal request
       */
      createWithdrawal: async (payload: CreateWithdrawalPayload): Promise<Withdrawal> => {
@@ -81,6 +101,8 @@ export const withdrawalApi = {
       */
      getStatistics: async (): Promise<WithdrawalStatistics> => {
           const response = await apiClient.get<{ data: WithdrawalStatistics }>(endpoints.withdrawal.statistics);
+          console.log('📊 Raw API response:', response.data);
+          console.log('📊 Statistics data:', response.data.data);
           return response.data.data;
      },
 };

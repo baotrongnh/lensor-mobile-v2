@@ -43,7 +43,9 @@ export type MarketplaceDetail = {
      rating?: number;
      reviewCount?: number;
      downloads?: number;
+     userId?: string; // Author's user ID for contact
      author: {
+          id?: string; // Author's user ID
           name: string;
           avatar: string;
           verified?: boolean;

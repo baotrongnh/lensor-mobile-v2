@@ -37,6 +37,7 @@ export const authHelpers = {
                     data: {
                          full_name: fullName,
                     },
+                    emailRedirectTo: 'lensor://auth-callback',
                },
           });
           return { data, error };
